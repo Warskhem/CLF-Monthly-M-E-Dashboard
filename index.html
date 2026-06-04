@@ -41,6 +41,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 .nav-tab .tab-badge{background:var(--accent-blue-dim, #1e40af);color:var(--accent-blue);font-size:9px;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700}
 .dash-main{max-width:1600px;margin:0 auto;padding:20px 28px 60px}
 .section-panel{display:none}.section-panel.active{display:block}
+.no-data-banner{display:flex;align-items:center;gap:14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:var(--radius-lg);padding:16px 20px;color:var(--text-primary)}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px}
 .kpi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;position:relative;overflow:hidden;transition:all .3s;animation:fadeIn .3s ease}
 .kpi-card:hover{border-color:var(--border-light);transform:translateY(-2px);box-shadow:var(--shadow-md)}
@@ -188,6 +189,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 </nav>
 
 <main class="dash-main">
+
+<div id="noDataBanner" style="display:none;margin-bottom:18px"></div>
 
 <div class="section-panel active" id="tab-overview">
   <div class="kpi-grid" id="kpiGrid"></div>
@@ -351,18 +354,32 @@ function getTotalClfs(){return Object.values(BLOCKS).reduce((s,a)=>s+a.length,0)
 function getCurrentMonth(){return document.getElementById('monthFilter').value}
 function getCurrentBlock(){return document.getElementById('blockFilter').value}
 
-function getFilteredData(month){
-  let d = allData.filter(x=>x.month===month);
-  const cv = document.getElementById('clfFilter').value;
-  if(cv!=='all'){
-    const p=cv.split('|||'), fb=p[0], fc=p.slice(1).join('|||');
-    d=d.filter(x=>x.block===fb && x.clf===fc);
-  }
-  return d;
-}
-
 function getDataForMonth(month){return allData.filter(x=>x.month===month)}
 function getDataForBlockMonth(b,m){return allData.filter(x=>x.block===b&&x.month===m)}
+
+function getCurrentCLF(){
+  const v=document.getElementById('clfFilter').value;
+  if(!v||v==='all') return {block:null,clf:null};
+  const p=v.split('|||');
+  return {block:p[0],clf:p.slice(1).join('|||')};
+}
+
+function getVisibleBlocks(){
+  const b=getCurrentBlock();
+  const sel=getCurrentCLF();
+  if(sel.clf) return [sel.block];
+  return b==='all'?Object.keys(BLOCKS):[b];
+}
+
+// Single source of truth for filtered data — respects month, block, AND CLF filters
+function getFilteredData(month){
+  let d=month?allData.filter(x=>x.month===month):allData;
+  const b=getCurrentBlock();
+  if(b!=='all') d=d.filter(x=>x.block===b);
+  const sel=getCurrentCLF();
+  if(sel.clf) d=d.filter(x=>x.clf===sel.clf);
+  return d;
+}
 
 function getPrevMonth(m){
   const[y,mo]=m.split('-').map(Number);
@@ -710,9 +727,9 @@ function renderActiveCharts(){
   if(currentTab==='overview') return;
   const sec=SECTIONS.find(s=>s.id===currentTab);
   if(sec){
-    const m=getCurrentMonth(),b=getCurrentBlock();
-    const d=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
-    const bl=b==='all'?Object.keys(BLOCKS):[b];
+    const m=getCurrentMonth();
+    const d=getFilteredData(m);
+    const bl=getVisibleBlocks();
     renderSectorBlockChart(sec,d,bl);
     renderSectorIndicatorTable(sec,d,bl);
     renderClfDrillDown(sec,d,bl);
@@ -738,11 +755,24 @@ function switchTab(tabId,tabEl){
 
 function renderOverview(){
   const m=getCurrentMonth(),b=getCurrentBlock();
-  const data=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
+  const sel=getCurrentCLF();
+  const data=getFilteredData(m);
   const pm=getPrevMonth(m);
-  const pd=b==='all'?getDataForMonth(pm):getDataForBlockMonth(b,pm);
+  const pd=getFilteredData(pm);
 
-  const totalClfs=b==='all'?getTotalClfs():getClfCount(b);
+  // "No data" banner when a specific CLF is selected but no submission exists
+  const banner=document.getElementById('noDataBanner');
+  if(banner){
+    if(sel.clf && data.length===0){
+      banner.innerHTML=`<div class="no-data-banner"><span style="font-size:22px">📭</span><div><strong>No data submitted</strong><br><span style="color:var(--text-muted);font-size:12px">No submission from <strong>${sel.clf}</strong> in ${m}. Showing zero values.</span></div></div>`;
+      banner.style.display='block';
+    } else {
+      banner.style.display='none';
+    }
+  }
+
+  // If a specific CLF is selected, scope "total CLFs" to that one; otherwise use block or all
+  const totalClfs=sel.clf?1:(b==='all'?getTotalClfs():getClfCount(b));
   const subClfs=new Set(data.map(d=>d.clf)).size;
   const compRate=totalClfs>0?Math.round((subClfs/totalClfs)*100):0;
 
@@ -779,18 +809,18 @@ function renderOverview(){
   document.getElementById('clfCountTotal').textContent=totalClfs+' CLFs';
   document.getElementById('blockCount').textContent=(b==='all'?5:1)+' Block'+(b==='all'?'s':'');
 
-  renderBlockSubChart(data,b);
+  const bl=getVisibleBlocks();
+  renderBlockSubChart(data,bl);
   renderSectorCovChart(data);
-  renderTopBlocks(data,m);
-  renderBlockSummary(data,b,m);
-  renderNpClf(data,b,m);
-  renderCompChart(data,b);
+  renderTopBlocks(data,m,bl);
+  renderBlockSummary(data,bl,m);
+  renderNpClf(data,bl,m);
+  renderCompChart(data,bl);
 }
 
-function renderBlockSubChart(data,b){
-  const bt=b==='all'?Object.keys(BLOCKS):[b];
+function renderBlockSubChart(data,bl){
   const bd={};
-  bt.forEach(x=>{const t=getClfCount(x);const s=new Set(data.filter(d=>d.block===x).map(d=>d.clf)).size;bd[x]={t,s}});
+  bl.forEach(x=>{const t=getClfCount(x);const s=new Set(data.filter(d=>d.block===x).map(d=>d.clf)).size;bd[x]={t,s}});
   newChart('chartBlockSubmissions','bar',{labels:Object.keys(bd),datasets:[{label:'Submitted',data:Object.values(bd).map(v=>v.s),backgroundColor:'rgba(59,130,246,.7)',borderRadius:4},{label:'Remaining',data:Object.values(bd).map(v=>v.t-v.s),backgroundColor:'rgba(239,68,68,.4)',borderRadius:4}]},chartOpts('horizontal'));
 }
 
@@ -799,24 +829,23 @@ function renderSectorCovChart(data){
   newChart('chartSectorCoverage','radar',{labels:sd.map(s=>s.n.replace(' Report','').replace(' Livelihood','')),datasets:[{label:'Coverage %',data:sd.map(s=>s.r),backgroundColor:'rgba(59,130,246,.15)',borderColor:'#3b82f6',borderWidth:2,pointBackgroundColor:sd.map(s=>s.c),pointRadius:5}]},{responsive:true,maintainAspectRatio:false,scales:{r:{beginAtZero:true,max:100,ticks:{display:false,stepSize:20},grid:{color:'rgba(42,45,62,.5)'},pointLabels:{color:'#9498b3',font:{size:10}}}},plugins:{legend:{display:false}}});
 }
 
-function renderTopBlocks(data,m){
-  const bp=Object.keys(BLOCKS).map(b=>{const bd=data.filter(d=>d.block===b);let f=0,t=0;bd.forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}))});const r=t>0?Math.round((f/t)*100):0;return{block:b,sub:new Set(data.filter(d=>d.block===b).map(d=>d.clf)).size,rate:r}}).sort((a,b)=>b.rate-a.rate);
+function renderTopBlocks(data,m,bl){
+  bl=bl||Object.keys(BLOCKS);
+  const bp=bl.map(b=>{const bd=data.filter(d=>d.block===b);let f=0,t=0;bd.forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}))});const r=t>0?Math.round((f/t)*100):0;return{block:b,sub:new Set(data.filter(d=>d.block===b).map(d=>d.clf)).size,rate:r}}).sort((a,b)=>b.rate-a.rate);
   let h='<table class="data-table"><thead><tr><th>#</th><th>Block</th><th>Submitted</th><th>Coverage</th><th>Score</th></tr></thead><tbody>';
   bp.forEach((b,i)=>{const c=b.rate>80?'var(--accent-green)':b.rate>50?'var(--accent-amber)':'var(--accent-red)';h+=`<tr><td style="color:var(--text-muted)">${i+1}</td><td style="font-weight:600;color:var(--text-primary)">${b.block}</td><td>${b.sub}</td><td><div class="progress"><div class="progress-fill" style="width:${b.rate}%;background:${c}"></div></div></td><td><span style="color:${c};font-weight:700">${b.rate}%</span></td></tr>`});
   h+='</tbody></table>';
   document.getElementById('topBlocksTable').innerHTML=h;
 }
 
-function renderBlockSummary(data,bSel,m){
-  const bl=bSel==='all'?Object.keys(BLOCKS):[bSel];
+function renderBlockSummary(data,bl,m){
   let h='<table class="data-table"><thead><tr><th>Block</th><th>CLFs</th><th>Submitted</th><th>Completion</th><th>Quality</th><th>Status</th></tr></thead><tbody>';
   bl.forEach(b=>{const t=getClfCount(b);const s=new Set(data.filter(d=>d.block===b).map(d=>d.clf)).size;const r=t>0?Math.round((s/t)*100):0;let f=0,tot=0;data.filter(d=>d.block===b).forEach(d=>{SECTIONS.forEach(se=>se.indicators.forEach(i=>{tot++;if(d.indicators[i]!=='')f++}))});const q=tot>0?Math.round((f/tot)*100):0;const sc=r>=80?'badge-green':r>=50?'badge-amber':'badge-red';const st=r>=80?'On Track':r>=50?'Partial':'Behind';h+=`<tr><td style="font-weight:600">${b}</td><td>${t}</td><td>${s}</td><td><span style="font-weight:700;color:${r>=80?'var(--accent-green)':r>=50?'var(--accent-amber)':'var(--accent-red)'}">${r}%</span></td><td><span style="font-weight:700;color:${q>=80?'var(--accent-green)':q>=50?'var(--accent-amber)':'var(--accent-red)'}">${q}%</span></td><td><span class="badge ${sc}">${st}</span></td></tr>`});
   h+='</tbody></table>';
   document.getElementById('blockSummaryTable').innerHTML=h;
 }
 
-function renderNpClf(data,bSel,m){
-  const bl=bSel==='all'?Object.keys(BLOCKS):[bSel];
+function renderNpClf(data,bl,m){
   const np=[];
   bl.forEach(b=>{BLOCKS[b].forEach(clf=>{const d=data.find(x=>x.block===b&&x.clf===clf);if(!d){np.push({block:b,clf,reason:'No submission',score:0});return}let f=0,t=0;SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}));const r=t>0?Math.round((f/t)*100):0;if(r<50)np.push({block:b,clf,reason:'Low quality ('+r+'%)',score:r})})});
   np.sort((a,b)=>a.score-b.score);
@@ -827,8 +856,7 @@ function renderNpClf(data,bSel,m){
   document.getElementById('npClfTable').innerHTML=h;
 }
 
-function renderCompChart(data,b){
-  const bl=b==='all'?Object.keys(BLOCKS):[b];
+function renderCompChart(data,bl){
   const cd=bl.map(x=>({block:x,rate:getClfCount(x)>0?Math.round((new Set(data.filter(d=>d.block===x).map(d=>d.clf)).size/getClfCount(x))*100):0}));
   newChart('chartCompletionBlock','doughnut',{labels:cd.map(c=>c.block),datasets:[{data:cd.map(c=>c.rate),backgroundColor:cd.map(c=>BLOCK_COLORS[c.block]||'#666'),borderColor:'var(--bg-card)',borderWidth:3,hoverOffset:8}]},{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'bottom',labels:{color:'#9498b3',padding:12,font:{size:11}}}}});
 }
@@ -846,9 +874,9 @@ function renderSectorTabs(){
   SECTIONS.forEach(sec=>{
     const p=document.getElementById('tab-'+sec.id);
     if(!p) return;
-    const m=getCurrentMonth(),b=getCurrentBlock();
-    const d=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
-    const bl=b==='all'?Object.keys(BLOCKS):[b];
+    const m=getCurrentMonth();
+    const d=getFilteredData(m);
+    const bl=getVisibleBlocks();
     const isActive=currentTab===sec.id;
 
     let html='<div class="kpi-grid">';
@@ -952,9 +980,9 @@ function renderClfDrillDown(sec,data,blocks){
 
 window.seClick=function(sid,block){
   const sec=SECTIONS.find(s=>s.id===sid);if(!sec)return;
-  const m=getCurrentMonth(),bf=getCurrentBlock();
-  const d=bf==='all'?getDataForMonth(m):getDataForBlockMonth(bf,m);
-  const bl=bf==='all'?Object.keys(BLOCKS):[bf];
+  const m=getCurrentMonth();
+  const d=getFilteredData(m);
+  const bl=getVisibleBlocks();
   const se=document.getElementById('clfSelector'+sid), ge=document.getElementById('clfGrid'+sid);
   if(!se||!ge)return;
   se.querySelectorAll('.block-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.block===block));
@@ -999,9 +1027,9 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 // ═══ QUALITY TAB ═══
 
 function renderQualityTab(){
-  const m=getCurrentMonth(),b=getCurrentBlock();
-  const data=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
-  const bl=b==='all'?Object.keys(BLOCKS):[b];
+  const m=getCurrentMonth();
+  const data=getFilteredData(m);
+  const bl=getVisibleBlocks();
   const qb={};
   bl.forEach(x=>{let f=0,t=0;data.filter(d=>d.block===x).forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}))});qb[x]=t>0?Math.round((f/t)*100):0});
   newChart('chartQuality','bar',{labels:Object.keys(qb),datasets:[{label:'Data Quality %',data:Object.values(qb),backgroundColor:Object.values(qb).map(v=>v>80?'rgba(16,185,129,.6)':v>50?'rgba(245,158,11,.6)':'rgba(239,68,68,.6)'),borderRadius:6}]},{...chartOpts('vertical'),scales:{...chartOpts('vertical').scales,y:{...chartOpts('vertical').scales.y,max:100}}});
@@ -1027,25 +1055,25 @@ function renderTrendsTab(){
   const months=[];
   const now=new Date();
   for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
-  const b=getCurrentBlock(),bl=b==='all'?Object.keys(BLOCKS):[b];
+  const bl=getVisibleBlocks();
 
-  const lT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of Loan Sanctioned']||0),0));
-  const sT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG in CLF']||0),0));
-  const qT=months.map(m=>{let f=0,t=0;getDataForMonth(m).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0});
+  const lT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['No. of Loan Sanctioned']||0),0));
+  const sT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG in CLF']||0),0));
+  const qT=months.map(m=>{let f=0,t=0;getFilteredData(m).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0});
   const ml=months.map(m=>{const[y,mo]=m.split('-');return['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo]+' '+y.slice(2)});
 
   newChart('chartTrendMain','line',{labels:ml,datasets:[{label:'Loans Sanctioned',data:lT,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.4,pointRadius:4},{label:'SHGs',data:sT,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.4,pointRadius:4,yAxisID:'y1'},{label:'Data Quality %',data:qT,borderColor:'#f59e0b',borderDash:[5,5],tension:.4,pointRadius:4,yAxisID:'y2'}]},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{position:'left',grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a'}},y1:{position:'right',grid:{display:false},ticks:{color:'#10b981'}},y2:{display:false,min:0,max:100}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
 
-  newChart('chartBlockTrend','line',{labels:ml,datasets:bl.map(b=>({label:b,data:months.map(m=>{let f=0,t=0;getDataForBlockMonth(b,m).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0}),borderColor:BLOCK_COLORS[b]||'#666',backgroundColor:(BLOCK_COLORS[b]||'#666')+'15',fill:false,tension:.4,pointRadius:4,borderWidth:2}))},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{min:0,max:100,grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',callback:v=>v+'%'}}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
+  newChart('chartBlockTrend','line',{labels:ml,datasets:bl.map(b=>({label:b,data:months.map(m=>{let f=0,t=0;getFilteredData(m).filter(x=>x.block===b).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0}),borderColor:BLOCK_COLORS[b]||'#666',backgroundColor:(BLOCK_COLORS[b]||'#666')+'15',fill:false,tension:.4,pointRadius:4,borderWidth:2}))},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{min:0,max:100,grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',callback:v=>v+'%'}}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
 
-  const aT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Amount Sanctioned']||0),0));
-  const rT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Loan Repayment']||0),0));
-  const nT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG Having NPA']||0),0));
+  const aT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['Amount Sanctioned']||0),0));
+  const rT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['Loan Repayment']||0),0));
+  const nT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG Having NPA']||0),0));
   newChart('chartFinTrend','bar',{labels:ml,datasets:[{label:'Amount Sanctioned',data:aT,backgroundColor:'rgba(59,130,246,.6)',borderRadius:3},{label:'Loan Repayment',data:rT,backgroundColor:'rgba(16,185,129,.6)',borderRadius:3},{label:'NPA Count',data:nT,backgroundColor:'rgba(239,68,68,.6)',borderRadius:3}]},chartOpts('vertical'));
 
-  const pT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Producer Group Formation']||0),0));
-  const eT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Farm Entrepreneur']||0),0));
-  const lkT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Lakhpati Didi']||0),0));
+  const pT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['Producer Group Formation']||0),0));
+  const eT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['Farm Entrepreneur']||0),0));
+  const lkT=months.map(m=>getFilteredData(m).reduce((s,x)=>s+Number(x.indicators['Lakhpati Didi']||0),0));
   newChart('chartLiveTrend','line',{labels:ml,datasets:[{label:'Producer Groups',data:pT,borderColor:'#14b8a6',backgroundColor:'rgba(20,184,166,.1)',fill:true,tension:.4,pointRadius:4},{label:'Farm Entrepreneurs',data:eT,borderColor:'#f59e0b',tension:.4,pointRadius:4},{label:'Lakhpati Didi',data:lkT,borderColor:'#8b5cf6',tension:.4,pointRadius:4}]},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a'}}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
 }
 
