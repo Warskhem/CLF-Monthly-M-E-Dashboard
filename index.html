@@ -362,122 +362,81 @@ function setDataSource(src, msg){
 
 // ═══ GOOGLE SHEETS FETCH ═══
 
+function sheetUrl(){return SHEET_URL+'?t='+Date.now()}
+
+const CORS_PROXIES=[
+  null,
+  'https://api.allorigins.win/get?url=',
+  'https://corsproxy.io/?'
+];
+
 async function fetchFromSheet(){
   document.getElementById('loadingOverlay').classList.remove('hidden');
   setDataSource('none','Connecting...');
-  const ac=new AbortController();
-  const timer=setTimeout(()=>ac.abort(),30000);
-  try{
-    const url=SHEET_URL+'?action=getAll&t='+Date.now();
-    const res=await fetch(url,{method:'GET',signal:ac.signal});
-    clearTimeout(timer);
-    if(!res.ok) throw new Error('HTTP '+res.status+' — ensure Apps Script is deployed as Web App with Anyone access');
-    const txt=await res.text();
-    // Try JSON parse
-    let data;
-    try{data=JSON.parse(txt)}catch(e){console.log('Raw response (first 200 chars):',txt.slice(0,200));setDataSource('none','Not JSON: '+(txt.slice(0,60).replace(/\n/g,' ')));document.getElementById('loadingOverlay').classList.add('hidden');return false}
-
-    if(data && typeof data==='object' && data.error){setDataSource('none',data.error);document.getElementById('loadingOverlay').classList.add('hidden');return false}
-
-    // Format 1: {headers:[...], rows:[[...]]}
-    if(data && Array.isArray(data.rows)){
-      allData = parseRowsAsRecords(data.headers||[], data.rows);
-      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
-    }
-
-    // Format 2: [[header1,header2,...],[val1,val2,...], ...]
-    if(Array.isArray(data) && data.length>1 && Array.isArray(data[0])){
-      allData = parseRowsAsRecords(data[0], data.slice(1));
-      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
-    }
-
-    // Format 3: [{block,clf,month,indicators}]
-    if(Array.isArray(data) && data.length){
-      allData = parseSheetData(data);
-      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
-    }
-
-    setDataSource('none','No data in sheet');
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    return false;
-  }catch(e){
-    console.warn('Sheet fetch failed:', e.message);
-    setDataSource('none',e.name==='AbortError'?'Timed out — check URL & deployment':'Error: '+e.message);
-    document.getElementById('loadingOverlay').classList.add('hidden');
-    return false;
+  for(let pi=0;pi<CORS_PROXIES.length;pi++){
+    const proxy=CORS_PROXIES[pi];
+    const ac=new AbortController();
+    const timer=setTimeout(()=>ac.abort(),15000);
+    try{
+      let url=sheetUrl();
+      if(proxy) url=proxy+encodeURIComponent(url);
+      const res=await fetch(url,{method:'GET',signal:ac.signal});
+      clearTimeout(timer);
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      let txt;
+      if(proxy && proxy.includes('allorigins')){
+        const j=await res.json();
+        txt=j.contents;
+      } else {
+        txt=await res.text();
+      }
+      let data;
+      try{data=JSON.parse(txt)}catch(e){continue}
+      if(data && data.error) continue;
+      const converted=convertSummaryData(data);
+      if(converted && converted.length){
+        allData=converted;
+        setDataSource('sheet','Loaded');
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        window._chartExtras=data;
+        return true;
+      }
+    }catch(e){clearTimeout(timer);continue}
   }
+  setDataSource('none','Could not connect');
+  document.getElementById('loadingOverlay').classList.add('hidden');
+  return false;
 }
 
-function parseRowsAsRecords(headers, rows){
-  if(!headers.length||!rows.length) return [];
-  // Use original header names (do NOT mangle them)
-  const h=headers.map(h=>String(h).trim());
-  // Find key columns by original name
-  const idxBlock=h.findIndex(x=>/block/i.test(x));
-  const idxClf=h.findIndex(x=>/clf/i.test(x)||/cl$/i.test(x));
-  const idxMonth=h.findIndex(x=>/month|reporting|report.*month/i.test(x));
-  const idxTs=h.findIndex(x=>/timestamp|date|submission/i.test(x));
-  if(idxBlock<0||idxMonth<0) return [];
-  return rows.map(row=>{
-    if(!Array.isArray(row)) return null;
-    const block=String(row[idxBlock]||'').trim();
-    const month=String(row[idxMonth]||'').trim();
-    if(!block||!month) return null;
-    const clf=idxClf>=0?String(row[idxClf]||'').trim():'';
-    const indicators={};
-    h.forEach((name,i)=>{
-      if(i===idxBlock||i===idxClf||i===idxMonth||i===idxTs) return;
-      const val=row[i]!==undefined&&row[i]!==null?String(row[i]):'';
-      indicators[name]=val;
-    });
-    return {block,clf,month,reportedBy:'',submissionDate:'',indicators};
-  }).filter(x=>x);
-}
-
-function parseSheetData(arr){
-  // Expect array of objects with {block, clf, month, indicators, ...}
-  return arr.map(item=>{
-    if(!item || !item.block || !item.month) return null;
-    const indicators={};
-    // Collect all known indicator values from the item
-    SECTIONS.forEach(sec=>{
-      sec.indicators.forEach(ind=>{
-        const v = item.indicators ? item.indicators[ind] : item[ind];
-        indicators[ind] = v!==undefined && v!==null ? String(v) : '';
-      });
-    });
-    return {
-      block: item.block,
-      clf: item.clf || '',
-      month: item.month,
-      reportedBy: item.reportedBy || '',
-      submissionDate: item.submissionDate || '',
-      indicators
-    };
-  }).filter(x=>x!==null);
-}
-
-function parseSheetData(arr){
-  // Expect array of objects with {block, clf, month, indicators, ...}
-  return arr.map(item=>{
-    if(!item || !item.block || !item.month) return null;
-    const indicators={};
-    // Collect all known indicator values from the item
-    SECTIONS.forEach(sec=>{
-      sec.indicators.forEach(ind=>{
-        const v = item.indicators ? item.indicators[ind] : item[ind];
-        indicators[ind] = v!==undefined && v!==null ? String(v) : '';
-      });
-    });
-    return {
-      block: item.block,
-      clf: item.clf || '',
-      month: item.month,
-      reportedBy: item.reportedBy || '',
-      submissionDate: item.submissionDate || '',
-      indicators
-    };
-  }).filter(x=>x!==null);
+function convertSummaryData(d){
+  if(!d||typeof d!=='object'||Array.isArray(d)) return null;
+  if(typeof d.loansSanctioned==='undefined'&&typeof d.totalSHGs==='undefined') return null;
+  const now=new Date();
+  const month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const IND_MAP={
+    'No. of Loan Sanctioned':'loansSanctioned','Amount Sanctioned':'amountSanctioned','Loan Repayment':'loanRepayment','Defaulter Loan Repayment':'defaulterRepayment','VGF':'','PMFME Fund':'','MKSP':'','SVEP':'',
+    'No. of SHG in CLF':'totalSHGs','No. of Members Having Aadhaar':'aadhaarCovered','No. of SHGs Completed LokOS Profiling':'lokosSHGs','No. of SHGs Completed Transaction':'lokosShgTxn','No. of VOs Completed LokOS Profiling':'lokosVOs','No. of VOs Completed Transaction':'lokosVoTxn','No. of Cadre Registered in LokOS':'cadresLokos','No. of VOs having Bank A/C':'voBankAc','No. of SHGs having Bank A/C':'bankLoanSHGs',
+    'Training Received by CLF':'trainingCLF','Training Received by VO':'trainingVO','Training Received by SHG':'trainingSHG','Training Received by Cadres':'trainingCadre','Cadre MBK':'mbkAwMcp','Cadre MCP':'mcpCompleted','Cadre Bank Sakhi':'bankSakhi','Cadre Financial Literacy':'financialLiteracy','Cadre Krishi Sakhi':'krishiSakhi','Cadre Pashu Sakhi':'pashuSakhi','Cadre CRP-EP':'crpEpIcrpAcrp',
+    'SHG Grade A':'shgGradeA','SHG Grade B':'shgGradeB','SHG Grade C':'shgGradeC','SHG Grade D':'shgGradeD','VO Grade A':'voGradeA','VO Grade B':'voGradeB','VO Grade C':'voGradeC','VO Grade D':'voGradeD','SHG Annual Audit Completed':'auditSHG','VO Annual Audit Completed':'auditVO','SHG Completed MCP':'mcpCompleted','Functional Sub Committee':'subCommittees',
+    'No. of PMJJBY':'pmjjby','No. of PMSBY':'pmsby','No. of MHIS':'mhis','No. of APY':'apy','No. of FLC Conducted at Saksham Center':'flcSessions',
+    'Producer Group Formation':'producerGroups','MK Mobilised under PG':'mksMobilised','MK Natural Farming':'naturalFarmingVillages','Area Natural Farming (acres)':'naturalFarmingArea','Villages Livestock Intervention':'intLivestock','Villages Organic Farming':'intOrganic',
+    'IFC Villages Covered':'ifcVillages','IFC Natural Farming Farmers':'ifcFarmers','IFC Natural Farming Area (acres)':'ifcArea','IFC PG Received Funds':'ifcPGFunds',
+    'MK Loan Livestock CIF (Amount)':'livelihoodLoans.livestockCIF','MK Loan Livestock Bank (Amount)':'livelihoodLoans.livestockBank','MK Loan Agri CIF (Amount)':'livelihoodLoans.agriCIF','MK Loan Agri Bank (Amount)':'livelihoodLoans.agriBank',
+    'Potential Lakhpati Didi':'lakhpatiTarget','Lakhpati Didi':'lakhpatiAchieved',
+    'PMFME Applications':'pmfmeApplications','PMFME Beneficiaries Repayment':'pmfmeBeneficiaries','PMFME Amount':'pmfmeAmount','Mudra Applications':'mudraLoans','Mudra Amount':'mudraAmount','PMEGP Applications':'pmegp','PMEGP Amount':'pmegpAmount','Enterprise Individual':'totalEnterprises','FSSAI':'fssai','UAM':'uam','GST':'gst','Events/Fair/Melas':'events','Sales Amount':'totalSales','TCPC Sales Amount':'tcpcSales',
+    'PLD Non-Farm':'pldNonFarm','PLD Financial Linked':'pldFinancialLinked','PLD Income <1L':'incLt1L','PLD Income >1L':'incGt1L','PLD Income 2-3L':'inc2to3L','PLD Income 3-5L+':'inc3to5L','Individual Bank Loan (No)':'indEnterprises','Group Bank Loan (No)':'grpEnterprises'
+  };
+  function getVal(obj,path){
+    if(!path) return '';const parts=path.split('.');let v=obj;
+    for(const p of parts){if(v&&typeof v==='object')v=v[p];else return ''}
+    return v!==undefined&&v!==null?v:''
+  }
+  const indicators={};
+  SECTIONS.forEach(sec=>{sec.indicators.forEach(ind=>{const v=getVal(d,IND_MAP[ind]||'');indicators[ind]=v!==''&&v!==undefined&&v!==null?String(v):''})});
+  const records=[],thisMonth=month;
+  Object.keys(BLOCKS).forEach(block=>{records.push({block,clf:'All CLFs',month:thisMonth,reportedBy:'System',submissionDate:'',indicators:{...indicators}})});
+  window._chartExtras={fundBreakdown:d.fundBreakdown||{},fnhw:d.fnhw||{},loanTrend:d.loanTrend||{},blockCompare:d.blockCompare||{}};
+  return records;
 }
 
 // ═══ DEMO DATA ═══
