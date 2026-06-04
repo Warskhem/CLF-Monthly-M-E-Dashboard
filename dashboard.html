@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLF M&E Dashboard — West Khasi Hills</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg-primary:#0f1117;--bg-secondary:#161822;--bg-card:#1c1f2e;--bg-card-hover:#222640;--border:#2a2d3e;--border-light:#353849;--text-primary:#e4e6f0;--text-secondary:#9498b3;--text-muted:#6b6f8a;--accent-blue:#3b82f6;--accent-green:#10b981;--accent-amber:#f59e0b;--accent-red:#ef4444;--accent-purple:#8b5cf6;--accent-teal:#14b8a6;--shadow-md:0 4px 12px rgba(0,0,0,.5);--radius-lg:14px;--radius:10px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);color:var(--text-primary);font-size:13px;line-height:1.5;overflow-x:hidden}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg-secondary)}::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+.dash-header{background:linear-gradient(135deg,#0c1222,#162040,#0c1222);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200}
+.dash-header-inner{max-width:1600px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.dash-header .logo{display:flex;align-items:center;gap:14px}
+.dash-header .logo-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1e40af,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 15px rgba(59,130,246,.3)}
+.dash-header h1{font-size:18px;font-weight:700;color:#fff}
+.dash-header .subtitle{font-size:11px;color:var(--text-muted)}
+.header-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.header-controls select,.header-controls input{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:7px;font-size:12px;min-width:140px;transition:all .2s}
+.header-controls select:focus,.header-controls input:focus{border-color:var(--accent-blue);outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.header-controls label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:block;margin-bottom:3px}
+.ctrl-field{display:flex;flex-direction:column}
+.btn{background:linear-gradient(135deg,#1e40af,#3b82f6);color:#fff;border:none;padding:8px 16px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;transition:all .2s;white-space:nowrap}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(59,130,246,.3)}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-secondary)}
+.btn-outline:hover{background:var(--bg-card-hover);border-color:var(--accent-blue);color:var(--accent-blue)}
+.btn-success{background:linear-gradient(135deg,#065f46,#10b981)}
+.btn-success:hover{box-shadow:0 4px 12px rgba(16,185,129,.3)}
+.btn-amber{background:linear-gradient(135deg,#78350f,#f59e0b)}
+.data-status{font-size:10px;color:var(--text-muted);display:flex;align-items:center;gap:6px}
+.data-status .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot-green{background:var(--accent-green)}.dot-amber{background:var(--accent-amber)}.dot-red{background:var(--accent-red)}
+.nav-tabs{background:var(--bg-secondary);border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap}
+.nav-tabs-inner{max-width:1600px;margin:0 auto;padding:0 28px;display:flex;gap:0}
+.nav-tab{padding:12px 20px;font-size:12px;font-weight:600;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;letter-spacing:.3px}
+.nav-tab:hover{color:var(--text-secondary);background:rgba(59,130,246,.05)}
+.nav-tab.active{color:var(--accent-blue);border-bottom-color:var(--accent-blue);background:rgba(59,130,246,.08)}
+.nav-tab .tab-badge{background:var(--accent-blue-dim, #1e40af);color:var(--accent-blue);font-size:9px;padding:1px 6px;border-radius:8px;margin-left:6px;font-weight:700}
+.dash-main{max-width:1600px;margin:0 auto;padding:20px 28px 60px}
+.section-panel{display:none}.section-panel.active{display:block}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px}
+.kpi-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;position:relative;overflow:hidden;transition:all .3s;animation:fadeIn .3s ease}
+.kpi-card:hover{border-color:var(--border-light);transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.kpi-card .kpi-icon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px}
+.kpi-card .kpi-value{font-size:26px;font-weight:800;letter-spacing:-.5px;margin-bottom:2px}
+.kpi-card .kpi-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.kpi-card .kpi-trend{position:absolute;top:16px;right:16px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
+.kpi-card .kpi-trend.up{background:rgba(16,185,129,.12);color:var(--accent-green)}
+.kpi-card .kpi-trend.down{background:rgba(239,68,68,.12);color:var(--accent-red)}
+.kpi-card .kpi-trend.neutral{background:rgba(245,158,11,.12);color:var(--accent-amber)}
+.kpi-card .kpi-bar{height:3px;background:var(--border);border-radius:2px;margin-top:12px;overflow:hidden}
+.kpi-card .kpi-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
+.panel-row{display:grid;gap:16px;margin-bottom:16px}
+.panel-row.cols-2{grid-template-columns:1fr 1fr}
+.panel-row.cols-1-2{grid-template-columns:1fr 2fr}
+@media(max-width:1100px){.panel-row.cols-2,.panel-row.cols-1-2{grid-template-columns:1fr}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:all .3s}
+.card:hover{border-color:var(--border-light)}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h3{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card-header .card-badge{font-size:10px;padding:2px 8px;border-radius:6px;font-weight:600}
+.card-body{padding:16px 18px}
+.card-body.no-pad{padding:0}
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table thead{position:sticky;top:0;z-index:2}
+.data-table th{background:var(--bg-secondary);color:var(--text-muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:middle}
+.data-table tbody tr:hover{background:rgba(59,130,246,.04)}
+.data-table tbody tr:last-child td{border-bottom:none}
+.table-scroll{max-height:420px;overflow-y:auto}
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;white-space:nowrap}
+.badge-green{background:rgba(16,185,129,.12);color:var(--accent-green)}
+.badge-amber{background:rgba(245,158,11,.12);color:var(--accent-amber)}
+.badge-red{background:rgba(239,68,68,.12);color:var(--accent-red)}
+.badge-blue{background:rgba(59,130,246,.12);color:var(--accent-blue)}
+.progress{height:6px;background:var(--border);border-radius:3px;overflow:hidden;min-width:60px}
+.progress-fill{height:100%;border-radius:3px;transition:width .5s ease}
+.progress-sm{height:4px}
+.chart-container{position:relative;width:100%;height:280px}
+.chart-container.tall{height:350px}
+.block-selector{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.block-btn{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:6px}
+.block-btn:hover{border-color:var(--accent-blue);color:var(--accent-blue)}
+.block-btn.active{background:rgba(59,130,246,.12);border-color:var(--accent-blue);color:var(--accent-blue)}
+.block-btn .block-count{background:var(--bg-secondary);padding:1px 6px;border-radius:4px;font-size:10px}
+.clf-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+.clf-card{background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;cursor:pointer;transition:all .2s}
+.clf-card:hover{border-color:var(--accent-blue);background:var(--bg-card-hover)}
+.clf-card .clf-name{font-size:12px;font-weight:600;color:var(--text-primary);margin-bottom:6px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.clf-card .clf-meta{display:flex;gap:10px;flex-wrap:wrap}
+.clf-card .clf-stat{font-size:10px;color:var(--text-muted)}
+.clf-card .clf-stat strong{color:var(--text-secondary)}
+.indicator-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.indicator-item{background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.indicator-item:hover{border-color:var(--border-light)}
+.indicator-item .ind-label{font-size:11px;color:var(--text-muted);margin-bottom:4px;line-height:1.3}
+.indicator-item .ind-value{font-size:18px;font-weight:700;color:var(--text-primary)}
+.indicator-item .ind-bar{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+.indicator-item .ind-bar-fill{height:100%;border-radius:2px}
+.quality-item{display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.quality-item:last-child{border-bottom:none}
+.quality-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.quality-info .q-title{font-size:12px;font-weight:600;color:var(--text-primary)}
+.quality-info .q-desc{font-size:10px;color:var(--text-muted);margin-top:1px}
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;overflow-y:auto;padding:20px}
+.modal-overlay.show{display:flex;align-items:flex-start;justify-content:center}
+.modal-box{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);width:100%;max-width:900px;margin-top:40px;box-shadow:0 8px 30px rgba(0,0,0,.6)}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h3{font-size:14px;font-weight:700}
+.modal-close{background:none;border:none;color:var(--text-muted);font-size:24px;cursor:pointer;padding:4px 8px;border-radius:6px}
+.modal-close:hover{color:var(--accent-red);background:rgba(239,68,68,.1)}
+.modal-body{padding:20px;max-height:70vh;overflow-y:auto}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text-muted)}
+.empty-state .empty-icon{font-size:40px;margin-bottom:12px;opacity:.5}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.animate-in{animation:fadeIn .3s ease}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent-blue);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay{position:fixed;inset:0;background:rgba(15,17,23,.85);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
+.loading-overlay.hidden{display:none}
+.loading-overlay p{color:var(--text-muted);font-size:14px}
+@media(max-width:768px){.dash-header-inner{flex-direction:column;align-items:flex-start}.header-controls{width:100%}.kpi-grid{grid-template-columns:repeat(2,1fr)}.dash-main{padding:12px 14px 40px}.nav-tab{padding:10px 14px;font-size:11px}}
+@media(max-width:480px){.kpi-grid{grid-template-columns:1fr}}
+@media print{body{background:#fff!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.dash-header{position:static!important;background:#1a365d!important;-webkit-print-color-adjust:exact}.dash-header h1{color:#fff!important}.dash-header .subtitle{color:#ccc!important}.header-controls,.nav-tabs,.btn,.btn-success,.data-status,.loading-overlay,.modal-overlay{display:none!important}.section-panel{display:block!important}.section-panel.active{display:block!important}.card{break-inside:avoid;border:1px solid #ddd!important;background:#fff!important}.card-header{background:#f5f7fa!important;border-bottom:1px solid #ddd!important}.card-header h3{color:#1a365d!important}.kpi-card{border:1px solid #ddd!important;background:#fafbfc!important;break-inside:avoid}.kpi-card .kpi-value{color:#1a365d!important}.kpi-card .kpi-label{color:#666!important}.data-table th{background:#e8edf3!important;color:#333!important}.data-table td{color:#333!important;border-bottom:1px solid #eee!important}.clf-card{border:1px solid #ddd!important;background:#fafbfc!important;break-inside:avoid}.clf-card .clf-name{color:#000!important}.block-btn{display:none!important}.chart-container{height:200px!important}.chart-container.tall{height:250px!important}canvas{max-width:100%!important}.badge-green{background:#e6f7ee!important;color:#065f46!important}.badge-red{background:#fde8e8!important;color:#7f1d1d!important}.badge-amber{background:#fef3c7!important;color:#78350f!important}.quality-item{border-bottom:1px solid #eee!important}.indicator-item{border:1px solid #eee!important;background:#fafbfc!important}.indicator-item .ind-label{color:#666!important}.indicator-item .ind-value{color:#000!important}.empty-state p{color:#666!important}}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>Connecting to Google Sheets...</p>
+</div>
+
+<header class="dash-header">
+  <div class="dash-header-inner">
+    <div class="logo">
+      <div class="logo-icon">📊</div>
+      <div>
+        <h1>CLF Monthly M&E Dashboard</h1>
+        <div class="subtitle">West Khasi Hills District — Live Data from Google Sheets</div>
+      </div>
+    </div>
+    <div class="header-controls">
+      <div class="ctrl-field">
+        <label>Block</label>
+        <select id="blockFilter" onchange="onBlockChange()">
+          <option value="all">All Blocks</option>
+          <option>Mawshynrut</option><option>Nongstoin</option><option>Rambrai</option><option>Shallang</option><option>Ri-Muliang</option>
+        </select>
+      </div>
+      <div class="ctrl-field">
+        <label>CLF Name</label>
+        <select id="clfFilter" onchange="onClfChange()">
+          <option value="all">All CLFs</option>
+        </select>
+      </div>
+      <div class="ctrl-field">
+        <label>Month</label>
+        <input type="month" id="monthFilter" onchange="onFilterChange()">
+      </div>
+      <div class="ctrl-field">
+        <label>Year</label>
+        <select id="yearFilter" onchange="onFilterChange()"></select>
+      </div>
+      <button class="btn" onclick="refreshDashboard()">⟳ Refresh</button>
+      <button class="btn btn-success" onclick="downloadPDF(this)">📄 PDF Report</button>
+      <div class="data-status" id="dataStatus"><span class="dot dot-amber"></span> Loading...</div>
+    </div>
+  </div>
+</header>
+
+<nav class="nav-tabs">
+  <div class="nav-tabs-inner">
+    <div class="nav-tab active" data-tab="overview" onclick="switchTab('overview',this)">📊 Overview</div>
+    <div class="nav-tab" data-tab="financial" onclick="switchTab('financial',this)">💰 Financial</div>
+    <div class="nav-tab" data-tab="me" onclick="switchTab('me',this)">📈 M&E</div>
+    <div class="nav-tab" data-tab="ibcb" onclick="switchTab('ibcb',this)">🏫 IBCB</div>
+    <div class="nav-tab" data-tab="sisd" onclick="switchTab('sisd',this)">🤱 SISD</div>
+    <div class="nav-tab" data-tab="inclusion" onclick="switchTab('inclusion',this)">🏦 Inclusion</div>
+    <div class="nav-tab" data-tab="livelihood" onclick="switchTab('livelihood',this)">🌾 Livelihood</div>
+    <div class="nav-tab" data-tab="nonfarm" onclick="switchTab('nonfarm',this)">🏭 Non-Farm</div>
+    <div class="nav-tab" data-tab="quality" onclick="switchTab('quality',this)">🔍 Quality</div>
+    <div class="nav-tab" data-tab="trends" onclick="switchTab('trends',this)">📈 Trends</div>
+  </div>
+</nav>
+
+<main class="dash-main">
+
+<div class="section-panel active" id="tab-overview">
+  <div class="kpi-grid" id="kpiGrid"></div>
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>📊 Block-wise Submissions</h3><span class="card-badge badge-blue" id="blockCount">5 Blocks</span></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartBlockSubmissions"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>📈 Sector Coverage</h3><span class="card-badge badge-purple">7 Sectors</span></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartSectorCoverage"></canvas></div></div>
+    </div>
+  </div>
+  <div class="panel-row cols-1-2">
+    <div class="card">
+      <div class="card-header"><h3>🏆 Top Blocks</h3></div>
+      <div class="card-body no-pad"><div class="table-scroll" id="topBlocksTable"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>📋 Block Summary</h3><span class="card-badge badge-green" id="clfCountTotal">0 CLFs</span></div>
+      <div class="card-body no-pad"><div class="table-scroll" id="blockSummaryTable"></div></div>
+    </div>
+  </div>
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>⚠️ Non-Performing CLFs</h3></div>
+      <div class="card-body no-pad"><div class="table-scroll" id="npClfTable"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>📊 Completion by Block</h3></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartCompletionBlock"></canvas></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="section-panel" id="tab-financial"></div>
+<div class="section-panel" id="tab-me"></div>
+<div class="section-panel" id="tab-ibcb"></div>
+<div class="section-panel" id="tab-sisd"></div>
+<div class="section-panel" id="tab-inclusion"></div>
+<div class="section-panel" id="tab-livelihood"></div>
+<div class="section-panel" id="tab-nonfarm"></div>
+
+<div class="section-panel" id="tab-quality">
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>🔍 Data Quality by Block</h3></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartQuality"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>⚠️ Issues & Flags</h3></div>
+      <div class="card-body no-pad" id="dataIssuesList"></div>
+    </div>
+  </div>
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>📊 Missing Data by Sector</h3></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartMissingSector"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>🔎 Abnormal Values</h3></div>
+      <div class="card-body no-pad" id="abnormalValuesList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="section-panel" id="tab-trends">
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>📈 Key Indicators Trend</h3></div>
+      <div class="card-body"><div class="chart-container tall"><canvas id="chartTrendMain"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>📉 Block-wise Comparison</h3></div>
+      <div class="card-body"><div class="chart-container tall"><canvas id="chartBlockTrend"></canvas></div></div>
+    </div>
+  </div>
+  <div class="panel-row cols-2">
+    <div class="card">
+      <div class="card-header"><h3>💰 Financial Trend</h3></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartFinTrend"></canvas></div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>🌾 Livelihood Trend</h3></div>
+      <div class="card-body"><div class="chart-container"><canvas id="chartLiveTrend"></canvas></div></div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<div class="modal-overlay" id="clfModal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="modalTitle">CLF Detail</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwH0PUdmstWLzIL-AfjW0YwiYLPoPGKhOZlOzluLwmoAei4sL7C7v4BtEu7zFhWTTWz/exec';
+
+const BLOCKS = {
+  Mawshynrut:["SAINDUR IA KA LAWEI CLF MULTIPURPOSE COOPERATIVE SOCIETY LTD","RYMPEI BAIAR CLUSTER LEVEL FEDERATION CLF","NONGTREI IONG BI CLUSTER LEVEL FEDERATION UMSOHPIENG","KURANGSAL CLF WOMEN MULTI PURPOSE COOPERATIVE SOCIETY","JINGKIENG BASKHEM CLF NONGJRI CIRCLE","MAWJAM CLF PORLA","NONGTREI ASOR CLF"],
+  Nongstoin:["15 SHNONG CLUSTER LEVEL FEDERATION","THWEIBIAR CLF NONGSTOIN","MAWJAMBASKHEM CLF","IAINEHSKHEM CLF","KHATWEI CLF PYNDENGREI","KHAW KYLLA CLF MAWEIT","KYRSHAN IA KA LAWEI CLF","IAIKYRSOI CLF","KYRSIEW CLF RISIANG","WANLAM JONGCHAI CLF WAHLYNGDOH"],
+  Rambrai:["SANDAKA CLF MAWDET","KHADHYNNIEW SHNONG CLUSTER LEVEL FEDERATION","WOMEN UNITED CLF RAMBRAI","IATREILANG CLF MAWTHIR","TBEHJINGSHAI CLF MAWDOH"],
+  Shallang:["NIASON CLF UMDANG"],
+  "Ri-Muliang":["TWAR BAN SAN CLF KYRDUM","BIRONGDIK CLF","IATYLLI BAN ROI CLF","TENGKAME CLF"]
+};
+
+const SECTIONS=[
+{id:'financial',name:'Financial Report',icon:'💰',color:'#3b82f6',indicators:['No. of Loan Sanctioned','Amount Sanctioned','Loan Repayment','Defaulter Loan Repayment','No. of SHG Having Active Loan','No. of SHG Having NPA','Receipt A/c','Payment A/c','Loan Demand Principal (CIF)','Loan Received Principal (CIF)','Interest Demand (CIF)','Interest Received','Idle fund','Loan Outstanding','CIF from Mission','CIF Returned from VO','VGF','PMFME Fund','MKSP','SVEP']},
+{id:'me',name:'M&E Report',icon:'📈',color:'#10b981',indicators:['No. of SHG in CLF','No. of Members Having Aadhaar','No. of SHGs Completed LokOS Profiling','No. of SHGs Completed Transaction','No. of VOs Completed LokOS Profiling','No. of VOs Completed Transaction','No. of Cadre Registered in LokOS','No. of VOs having Bank A/C','No. of SHGs having Bank A/C']},
+{id:'ibcb',name:'IBCB Report',icon:'🏫',color:'#f59e0b',indicators:['Training Received by CLF','Training Received by VO','Training Received by SHG','Training Received by Cadres','Cadre AW','Cadre MBK','Cadre MCP','Cadre BRT','Cadre CGHA','Cadre LRP','Cadre Bank Sakhi','Cadre Financial Literacy','Cadre Krishi Sakhi','Cadre Pashu Sakhi','Cadre CRP-EP','Cadre ACRP','Cadre MIS','Cadre ICRP','SHG Grade A','SHG Grade B','SHG Grade C','SHG Grade D','VO Grade A','VO Grade B','VO Grade C','VO Grade D','SHG Annual Audit Completed','VO Annual Audit Completed','SHG Completed MCP','Functional Sub Committee']},
+{id:'sisd',name:'SISD Report',icon:'🤱',color:'#ec4899',indicators:['Newly Formed SHG','Mobilized in Existing SHG','Special SHG','Follow Up Pregnant Women','VRF Utilization','FNHW Training','Child Cadre Support','Transit Home Report','FNHW Monthly Agenda','Community Event','VHND Programme','VPRP Demand Realization','Gram Sabha Meeting']},
+{id:'inclusion',name:'Financial Inclusion',icon:'🏦',color:'#f97316',indicators:['No. of PMJJBY','No. of PMSBY','No. of MHIS','No. of APY','No. of SHGs Avail Loan From Bank','No. of FLC Conducted at Saksham Center']},
+{id:'livelihood',name:'Livelihoods Report',icon:'🌾',color:'#14b8a6',indicators:['Training Agri/Horti','MK Livestock Intervention','Agri Nutri Garden HH','Villages Farm Livelihood','Krishi Sakhi','Pashu Sakhi','Producer Group Formation','MK Mobilised under PG','Udhyog Sakhi','MK Natural Farming','Area Natural Farming (acres)','Villages Livestock Intervention','Villages Organic Farming','Farm Entrepreneur','MK Pig Insurance','No of Pig Insured','MK KVK','MK AH Veterinary','MK Agriculture','MK Horticulture','MK Fisheries','MK ATMA','MK MGNREGA','IFC Villages Covered','IFC Natural Farming Farmers','IFC Natural Farming Area (acres)','IFC Input Shop','IFC Processing Centres','IFC Entrepreneurs','IFC PG Agri/Horti','IFC PG Livestock','IFC PG Received Funds','IFC Business Plan PG','IFC Models','IFC Type of Model','MK Loan Livestock CIF (No)','MK Loan Livestock CIF (Amount)','MK Loan Livestock Bank (No)','MK Loan Livestock Bank (Amount)','MK Loan Agri CIF (No)','MK Loan Agri CIF (Amount)','MK Loan Agri Bank (No)','MK Loan Agri Bank (Amount)','Potential Lakhpati Didi','Lakhpati Didi']},
+{id:'nonfarm',name:'Non-Farm Livelihood',icon:'🏭',color:'#8b5cf6',indicators:['PMFME Applications','PMFME Beneficiaries Repayment','PMFME Amount','Mudra Applications','Mudra Amount','PMEGP Applications','PMEGP Amount','Individual Bank Loan (No)','Individual Bank Loan (Amount)','Individual Bank Loan (Dose)','Group Bank Loan (No)','Group Bank Loan (Amount)','Group Bank Loan (Dose)','Individual CIF Loan (No)','Individual CIF Loan (Amount)','Individual CIF Loan (Dose)','Group CIF Loan (No)','Group CIF Loan (Amount)','Group CIF Loan (Dose)','Enterprise Individual','Enterprise Group','FSSAI','UAM','GST','Events/Fair/Melas','Sales Amount','TCPC Sales Amount','PLD Non-Farm','PLD Financial Linked','PLD Income <1L','PLD Income >1L','PLD Income 2-3L','PLD Income 3-5L+','PLD Convergence']}
+];
+
+const BLOCK_COLORS={Mawshynrut:'#3b82f6',Nongstoin:'#10b981',Rambrai:'#f59e0b',Shallang:'#ef4444','Ri-Muliang':'#8b5cf6'};
+
+let allData = [];
+let chartInstances = {};
+let dataSource = 'none';
+let currentTab = 'overview';
+
+// ═══ DATA LAYER ═══
+
+function getClfCount(b){return BLOCKS[b]?BLOCKS[b].length:0}
+function getTotalClfs(){return Object.values(BLOCKS).reduce((s,a)=>s+a.length,0)}
+function getCurrentMonth(){return document.getElementById('monthFilter').value}
+function getCurrentBlock(){return document.getElementById('blockFilter').value}
+
+function getFilteredData(month){
+  let d = allData.filter(x=>x.month===month);
+  const cv = document.getElementById('clfFilter').value;
+  if(cv!=='all'){
+    const p=cv.split('|||'), fb=p[0], fc=p.slice(1).join('|||');
+    d=d.filter(x=>x.block===fb && x.clf===fc);
+  }
+  return d;
+}
+
+function getDataForMonth(month){return allData.filter(x=>x.month===month)}
+function getDataForBlockMonth(b,m){return allData.filter(x=>x.block===b&&x.month===m)}
+
+function getPrevMonth(m){
+  const[y,mo]=m.split('-').map(Number);
+  const d=new Date(y,mo-2,1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+function formatNum(n){
+  if(n>=10000000) return (n/10000000).toFixed(1)+'Cr';
+  if(n>=100000) return (n/100000).toFixed(1)+'L';
+  if(n>=1000) return (n/1000).toFixed(1)+'K';
+  return String(Math.round(n));
+}
+
+function shortClf(n){return n.length>40?n.substring(0,40)+'...':n}
+
+function setDataSource(src, msg){
+  dataSource=src;
+  const el=document.getElementById('dataStatus');
+  if(src==='none') el.innerHTML='<span class="dot dot-red"></span> No data';
+  else if(src==='sheet') el.innerHTML='<span class="dot dot-green"></span> Google Sheets live';
+  else el.innerHTML='<span class="dot dot-amber"></span> '+msg;
+}
+
+// ═══ GOOGLE SHEETS FETCH ═══
+
+async function fetchFromSheet(){
+  document.getElementById('loadingOverlay').classList.remove('hidden');
+  setDataSource('none','Connecting...');
+  // 10s timeout
+  const ac=new AbortController();
+  const timer=setTimeout(()=>ac.abort(),10000);
+  try{
+    const res=await fetch(SHEET_URL,{method:'GET',signal:ac.signal,redirect:'follow'});
+    clearTimeout(timer);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const txt=await res.text();
+    // Try to parse as JSON
+    let data;
+    try{data=JSON.parse(txt)}catch(e){data=txt}
+    // Check if it's an error message or actual data
+    if(typeof data==='object' && data!==null && data.error){
+      console.log('Sheet response:', data.error);
+      setDataSource('none',data.error);
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      return false;
+    }
+    // If data is an array, it's actual submissions
+    if(Array.isArray(data) && data.length>0){
+      allData = parseSheetData(data);
+      setDataSource('sheet','Loaded');
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      return true;
+    }
+    // If data is a string or different format, try parsing as JSON array
+    if(typeof data==='string' && data.trim().startsWith('[')){
+      const parsed=JSON.parse(data);
+      if(Array.isArray(parsed) && parsed.length>0){
+        allData=parseSheetData(parsed);
+        setDataSource('sheet','Loaded');
+        document.getElementById('loadingOverlay').classList.add('hidden');
+        return true;
+      }
+    }
+    setDataSource('none','No data in sheet');
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    return false;
+  }catch(e){
+    console.warn('Sheet fetch failed:', e);
+    setDataSource('none','Connection error');
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    return false;
+  }
+}
+
+function parseSheetData(arr){
+  // Expect array of objects with {block, clf, month, indicators, ...}
+  return arr.map(item=>{
+    if(!item || !item.block || !item.month) return null;
+    const indicators={};
+    // Collect all known indicator values from the item
+    SECTIONS.forEach(sec=>{
+      sec.indicators.forEach(ind=>{
+        const v = item.indicators ? item.indicators[ind] : item[ind];
+        indicators[ind] = v!==undefined && v!==null ? String(v) : '';
+      });
+    });
+    return {
+      block: item.block,
+      clf: item.clf || '',
+      month: item.month,
+      reportedBy: item.reportedBy || '',
+      submissionDate: item.submissionDate || '',
+      indicators
+    };
+  }).filter(x=>x!==null);
+}
+
+// ═══ DEMO DATA ═══
+
+function downloadPDF(btn){
+  if(!btn) btn=document.querySelector('.btn-success');
+  btn.textContent='⏳ Capturing dashboard...';
+  btn.disabled=true;
+  // Switch to overview tab first
+  const ot=document.querySelector('.nav-tab[data-tab="overview"]');
+  if(ot) ot.click();
+  const {jsPDF}=window.jspdf;
+  const pdf=new jsPDF('p','mm','a4');
+  const pw=pdf.internal.pageSize.getWidth();
+  const ph=pdf.internal.pageSize.getHeight();
+
+  async function captureEl(selector,label){
+    const el=document.querySelector(selector);
+    if(!el) return;
+    if(el.getClientRects().length===0||el.offsetWidth===0) return;
+    if(el.closest('.section-panel')){
+      el.closest('.section-panel').style.display='block';
+    }
+    await new Promise(r=>setTimeout(r,200));
+    try{
+      const canvas=await html2canvas(el,{
+        scale:2,useCORS:true,backgroundColor:'#0f1117',
+        allowTaint:true,logging:false,
+        width:Math.max(el.scrollWidth,100),
+        height:Math.max(el.scrollHeight,100)
+      });
+      const imgData=canvas.toDataURL('image/png');
+      const imgW=canvas.width;
+      const imgH=canvas.height;
+      if(imgW<10||imgH<10) return;
+      const maxW=pw-20;
+      const renderW=maxW;
+      const renderH=renderW*imgH/imgW;
+      if(renderH<1) return;
+      let remainingH=renderH;
+      let srcY=0;
+      let pageCount=0;
+      while(remainingH>0.5){
+        if(pageCount>0) pdf.addPage();
+        const pageH=ph-20;
+        const sliceH=Math.min(remainingH,pageH);
+        const srcSliceH=Math.max(Math.round((sliceH/renderH)*imgH),1);
+        const tmpCanvas=document.createElement('canvas');
+        tmpCanvas.width=imgW;
+        tmpCanvas.height=srcSliceH;
+        const ctx=tmpCanvas.getContext('2d');
+        ctx.drawImage(canvas,0,srcY,imgW,srcSliceH,0,0,imgW,srcSliceH);
+        const sliceData=tmpCanvas.toDataURL('image/png');
+        pdf.addImage(sliceData,'PNG',10,10,renderW,sliceH);
+        srcY+=srcSliceH;
+        remainingH-=sliceH;
+        pageCount++;
+      }
+    } catch(e){console.warn('Capture failed for',selector,e)}
+  }
+
+  async function run(){
+    // Title page
+    pdf.setFillColor(15,17,23);
+    pdf.rect(0,0,pw,ph,'F');
+    pdf.setFontSize(24);
+    pdf.setTextColor(59,130,246);
+    pdf.text('CLF Monthly M&E Dashboard',pw/2,ph/2-30,{align:'center'});
+    pdf.setFontSize(14);
+    pdf.setTextColor(148,152,179);
+    pdf.text('West Khasi Hills District',pw/2,ph/2-10,{align:'center'});
+    pdf.setFontSize(10);
+    pdf.text('Generated: '+new Date().toLocaleString(),pw/2,ph/2+10,{align:'center'});
+    pdf.setFontSize(9);
+    pdf.text('Blocks: Mawshynrut | Nongstoin | Rambrai | Shallang | Ri-Muliang',pw/2,ph/2+28,{align:'center'});
+    pdf.setTextColor(107,111,138);
+    pdf.setFontSize(8);
+    pdf.text('CLF Monthly M&E Dashboard — Report Page 1',pw/2,ph-15,{align:'center'});
+
+    // Overview section captures
+    await captureEl('.kpi-grid','KPI Cards');
+
+    const chartRow=document.querySelector('.panel-row.cols-2');
+    if(chartRow) await captureEl('.panel-row.cols-2','Charts Row');
+
+    const topBlocks=document.querySelector('.panel-row.cols-1-2');
+    if(topBlocks) await captureEl('.panel-row.cols-1-2','Block Tables');
+
+    // Sector summaries
+    SECTIONS.forEach(sec=>{
+      pdf.addPage();
+      pdf.setFillColor(15,17,23);
+      pdf.rect(0,0,pw,ph,'F');
+      pdf.setFontSize(16);
+      pdf.setTextColor(59,130,246);
+      pdf.text(sec.icon+' '+sec.name+' — Block-wise Summary',pw/2,20,{align:'center'});
+      pdf.setFontSize(8);
+      pdf.setTextColor(107,111,138);
+      pdf.text('CLF M&E Dashboard | Page '+(pdf.getNumberOfPages()+1),pw/2,ph-15,{align:'center'});
+      // Scroll to this section to render charts
+      const tab=document.querySelector('.nav-tab[data-tab="'+sec.id+'"]');
+      if(tab) tab.click();
+    });
+
+    // Wait for all sector tabs to render, then capture them
+    await new Promise(r=>setTimeout(r,500));
+    for(const sec of SECTIONS){
+      const tab=document.querySelector('.nav-tab[data-tab="'+sec.id+'"]');
+      if(tab) tab.click();
+      await new Promise(r=>setTimeout(r,400));
+      // Capture the panel content
+      const panel=document.getElementById('tab-'+sec.id);
+      if(panel){
+        try{
+          const canvas=await html2canvas(panel,{
+            scale:2,useCORS:true,backgroundColor:'#0f1117',
+            allowTaint:true,logging:false,
+            width:panel.scrollWidth,height:panel.scrollHeight
+          });
+          const imgData=canvas.toDataURL('image/png');
+          const iw=canvas.width,ih=canvas.height;
+          const r=iw/ih;
+          const mw=pw-20;
+          const rw=mw;
+          const rh=rw/r;
+          pdf.addPage();
+          pdf.addImage(imgData,'PNG',10,10,rw,rh);
+        }catch(e){console.warn('Sector capture failed',sec.id,e)}
+      }
+    }
+
+    // Go back to overview
+    const ovTab=document.querySelector('.nav-tab[data-tab="overview"]');
+    if(ovTab) ovTab.click();
+
+    pdf.save('CLF_ME_Dashboard_Report.pdf');
+    btn.textContent='📄 PDF Report';
+    btn.disabled=false;
+  }
+
+  run();
+}
+
+// ═══ JSON IMPORT ═══
+
+// ═══ CHART & RENDER HELPERS ═══
+
+function destroyAllCharts(){
+  Object.values(chartInstances).forEach(c=>{try{c.destroy()}catch(e){}});
+  chartInstances={};
+}
+
+function chartOpts(dir){
+  return{responsive:true,maintainAspectRatio:false,indexAxis:dir==='horizontal'?'y':'x',
+    scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10},maxRotation:45}},
+            y:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}}},
+    plugins:{legend:{labels:{color:'#9498b3',padding:10,font:{size:11}}}},barPercentage:.7,categoryPercentage:.8};
+}
+
+function fullRefresh(){
+  destroyAllCharts();
+  renderOverview();
+  renderSectorTabs();
+  setTimeout(()=>renderActiveCharts(),80);
+}
+
+function onFilterChange(){fullRefresh()}
+function onBlockChange(){
+  updateClfDropdown();
+  fullRefresh();
+}
+function onClfChange(){fullRefresh()}
+
+function refreshDashboard(){
+  setDataSource(dataSource,'Refreshing...');
+  fullRefresh();
+}
+
+function renderActiveCharts(){
+  if(currentTab==='overview') return;
+  const sec=SECTIONS.find(s=>s.id===currentTab);
+  if(sec){
+    const m=getCurrentMonth(),b=getCurrentBlock();
+    const d=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
+    const bl=b==='all'?Object.keys(BLOCKS):[b];
+    renderSectorBlockChart(sec,d,bl);
+    renderSectorIndicatorTable(sec,d,bl);
+    renderClfDrillDown(sec,d,bl);
+  }
+  if(currentTab==='quality') renderQualityTab();
+  if(currentTab==='trends') renderTrendsTab();
+}
+
+// ═══ TAB SWITCHING ═══
+
+function switchTab(tabId,tabEl){
+  currentTab=tabId;
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.section-panel').forEach(p=>p.classList.remove('active'));
+  if(tabEl) tabEl.classList.add('active');
+  const panel=document.getElementById('tab-'+tabId);
+  if(panel) panel.classList.add('active');
+  destroyAllCharts();
+  setTimeout(()=>renderActiveCharts(),30);
+}
+
+// ═══ OVERVIEW ═══
+
+function renderOverview(){
+  const m=getCurrentMonth(),b=getCurrentBlock();
+  const data=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
+  const pm=getPrevMonth(m);
+  const pd=b==='all'?getDataForMonth(pm):getDataForBlockMonth(b,pm);
+
+  const totalClfs=b==='all'?getTotalClfs():getClfCount(b);
+  const subClfs=new Set(data.map(d=>d.clf)).size;
+  const compRate=totalClfs>0?Math.round((subClfs/totalClfs)*100):0;
+
+  let totI=0,filI=0,empI=0;
+  data.forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{totI++;if(d.indicators[i]!=='')filI++;else empI++}))});
+  const dq=totI>0?Math.round((filI/totI)*100):0;
+
+  const tLoans=data.reduce((s,d)=>s+Number(d.indicators['No. of Loan Sanctioned']||0),0);
+  const tAmt=data.reduce((s,d)=>s+Number(d.indicators['Amount Sanctioned']||0),0);
+  const tSHG=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG in CLF']||0),0);
+  const npa=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG Having NPA']||0),0);
+
+  const ps=new Set(pd.map(d=>d.clf)).size;
+  const pc=totalClfs>0?Math.round((ps/totalClfs)*100):0;
+  const cDelta=compRate-pc;
+  const pl=pd.reduce((s,d)=>s+Number(d.indicators['No. of Loan Sanctioned']||0),0);
+  const lDelta=pl>0?Math.round(((tLoans-pl)/pl)*100):0;
+
+  const kpis=[
+    {ic:'📋',lb:'Total CLFs',vl:totalClfs,tr:subClfs+' submitted',tc:'neutral',br:compRate,bc:'var(--accent-blue)'},
+    {ic:'✅',lb:'Completion',vl:compRate+'%',tr:(cDelta>=0?'+':'')+cDelta+'%',tc:cDelta>=0?'up':'down',br:compRate,bc:'var(--accent-green)'},
+    {ic:'💰',lb:'Loans',vl:formatNum(tLoans),tr:(lDelta>=0?'+':'')+lDelta+'%',tc:lDelta>=0?'up':'down',br:Math.min(100,tLoans/50),bc:'var(--accent-amber)'},
+    {ic:'🏦',lb:'Amount Sanctioned',vl:'₹'+formatNum(tAmt),tr:'',tc:'neutral',br:Math.min(100,tAmt/50000),bc:'var(--accent-purple)'},
+    {ic:'👥',lb:'Total SHGs',vl:formatNum(tSHG),tr:'',tc:'neutral',br:Math.min(100,tSHG/20),bc:'var(--accent-teal)'},
+    {ic:'🔍',lb:'Data Quality',vl:dq+'%',tr:empI+' missing',tc:dq>85?'up':dq>60?'neutral':'down',br:dq,bc:dq>85?'var(--accent-green)':dq>60?'var(--accent-amber)':'var(--accent-red)'},
+    {ic:'⚠️',lb:'NPA Count',vl:formatNum(npa),tr:npa>0?'needs attention':'clear',tc:npa>0?'down':'up',br:Math.min(100,npa*5),bc:npa>0?'var(--accent-red)':'var(--accent-green)'},
+    {ic:'📊',lb:'Indicators Filled',vl:formatNum(filI)+'/'+formatNum(totI),tr:dq+'%',tc:'neutral',br:dq,bc:'var(--accent-blue)'}
+  ];
+
+  document.getElementById('kpiGrid').innerHTML=kpis.map(k=>
+    `<div class="kpi-card" style="background:${k.bc}08"><div class="kpi-icon" style="background:${k.bc}22;color:${k.bc}">${k.ic}</div><div class="kpi-value" style="color:${k.bc}">${k.vl}</div><div class="kpi-label">${k.lb}</div>${k.tr?`<div class="kpi-trend ${k.tc}">${k.tr}</div>`:''}<div class="kpi-bar"><div class="kpi-bar-fill" style="width:${k.br}%;background:${k.bc}"></div></div></div>`
+  ).join('');
+
+  document.getElementById('clfCountTotal').textContent=totalClfs+' CLFs';
+  document.getElementById('blockCount').textContent=(b==='all'?5:1)+' Block'+(b==='all'?'s':'');
+
+  renderBlockSubChart(data,b);
+  renderSectorCovChart(data);
+  renderTopBlocks(data,m);
+  renderBlockSummary(data,b,m);
+  renderNpClf(data,b,m);
+  renderCompChart(data,b);
+}
+
+function renderBlockSubChart(data,b){
+  const bt=b==='all'?Object.keys(BLOCKS):[b];
+  const bd={};
+  bt.forEach(x=>{const t=getClfCount(x);const s=new Set(data.filter(d=>d.block===x).map(d=>d.clf)).size;bd[x]={t,s}});
+  newChart('chartBlockSubmissions','bar',{labels:Object.keys(bd),datasets:[{label:'Submitted',data:Object.values(bd).map(v=>v.s),backgroundColor:'rgba(59,130,246,.7)',borderRadius:4},{label:'Remaining',data:Object.values(bd).map(v=>v.t-v.s),backgroundColor:'rgba(239,68,68,.4)',borderRadius:4}]},chartOpts('horizontal'));
+}
+
+function renderSectorCovChart(data){
+  const sd=SECTIONS.map(s=>{let f=0,t=0;data.forEach(d=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}));return{n:s.name,r:t>0?Math.round((f/t)*100):0,c:s.color}});
+  newChart('chartSectorCoverage','radar',{labels:sd.map(s=>s.n.replace(' Report','').replace(' Livelihood','')),datasets:[{label:'Coverage %',data:sd.map(s=>s.r),backgroundColor:'rgba(59,130,246,.15)',borderColor:'#3b82f6',borderWidth:2,pointBackgroundColor:sd.map(s=>s.c),pointRadius:5}]},{responsive:true,maintainAspectRatio:false,scales:{r:{beginAtZero:true,max:100,ticks:{display:false,stepSize:20},grid:{color:'rgba(42,45,62,.5)'},pointLabels:{color:'#9498b3',font:{size:10}}}},plugins:{legend:{display:false}}});
+}
+
+function renderTopBlocks(data,m){
+  const bp=Object.keys(BLOCKS).map(b=>{const bd=data.filter(d=>d.block===b);let f=0,t=0;bd.forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}))});const r=t>0?Math.round((f/t)*100):0;return{block:b,sub:new Set(data.filter(d=>d.block===b).map(d=>d.clf)).size,rate:r}}).sort((a,b)=>b.rate-a.rate);
+  let h='<table class="data-table"><thead><tr><th>#</th><th>Block</th><th>Submitted</th><th>Coverage</th><th>Score</th></tr></thead><tbody>';
+  bp.forEach((b,i)=>{const c=b.rate>80?'var(--accent-green)':b.rate>50?'var(--accent-amber)':'var(--accent-red)';h+=`<tr><td style="color:var(--text-muted)">${i+1}</td><td style="font-weight:600;color:var(--text-primary)">${b.block}</td><td>${b.sub}</td><td><div class="progress"><div class="progress-fill" style="width:${b.rate}%;background:${c}"></div></div></td><td><span style="color:${c};font-weight:700">${b.rate}%</span></td></tr>`});
+  h+='</tbody></table>';
+  document.getElementById('topBlocksTable').innerHTML=h;
+}
+
+function renderBlockSummary(data,bSel,m){
+  const bl=bSel==='all'?Object.keys(BLOCKS):[bSel];
+  let h='<table class="data-table"><thead><tr><th>Block</th><th>CLFs</th><th>Submitted</th><th>Completion</th><th>Quality</th><th>Status</th></tr></thead><tbody>';
+  bl.forEach(b=>{const t=getClfCount(b);const s=new Set(data.filter(d=>d.block===b).map(d=>d.clf)).size;const r=t>0?Math.round((s/t)*100):0;let f=0,tot=0;data.filter(d=>d.block===b).forEach(d=>{SECTIONS.forEach(se=>se.indicators.forEach(i=>{tot++;if(d.indicators[i]!=='')f++}))});const q=tot>0?Math.round((f/tot)*100):0;const sc=r>=80?'badge-green':r>=50?'badge-amber':'badge-red';const st=r>=80?'On Track':r>=50?'Partial':'Behind';h+=`<tr><td style="font-weight:600">${b}</td><td>${t}</td><td>${s}</td><td><span style="font-weight:700;color:${r>=80?'var(--accent-green)':r>=50?'var(--accent-amber)':'var(--accent-red)'}">${r}%</span></td><td><span style="font-weight:700;color:${q>=80?'var(--accent-green)':q>=50?'var(--accent-amber)':'var(--accent-red)'}">${q}%</span></td><td><span class="badge ${sc}">${st}</span></td></tr>`});
+  h+='</tbody></table>';
+  document.getElementById('blockSummaryTable').innerHTML=h;
+}
+
+function renderNpClf(data,bSel,m){
+  const bl=bSel==='all'?Object.keys(BLOCKS):[bSel];
+  const np=[];
+  bl.forEach(b=>{BLOCKS[b].forEach(clf=>{const d=data.find(x=>x.block===b&&x.clf===clf);if(!d){np.push({block:b,clf,reason:'No submission',score:0});return}let f=0,t=0;SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}));const r=t>0?Math.round((f/t)*100):0;if(r<50)np.push({block:b,clf,reason:'Low quality ('+r+'%)',score:r})})});
+  np.sort((a,b)=>a.score-b.score);
+  let h='<table class="data-table"><thead><tr><th>Block</th><th>CLF</th><th>Score</th><th>Issue</th></tr></thead><tbody>';
+  if(np.length===0)h+='<tr><td colspan="4" style="text-align:center;color:var(--accent-green);padding:20px">All CLFs performing well!</td></tr>';
+  np.slice(0,15).forEach(c=>{h+=`<tr><td>${c.block}</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${shortClf(c.clf)}</td><td><span style="color:var(--accent-red);font-weight:700">${c.score}%</span></td><td><span class="badge badge-red">${c.reason}</span></td></tr>`});
+  h+='</tbody></table>';
+  document.getElementById('npClfTable').innerHTML=h;
+}
+
+function renderCompChart(data,b){
+  const bl=b==='all'?Object.keys(BLOCKS):[b];
+  const cd=bl.map(x=>({block:x,rate:getClfCount(x)>0?Math.round((new Set(data.filter(d=>d.block===x).map(d=>d.clf)).size/getClfCount(x))*100):0}));
+  newChart('chartCompletionBlock','doughnut',{labels:cd.map(c=>c.block),datasets:[{data:cd.map(c=>c.rate),backgroundColor:cd.map(c=>BLOCK_COLORS[c.block]||'#666'),borderColor:'var(--bg-card)',borderWidth:3,hoverOffset:8}]},{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'bottom',labels:{color:'#9498b3',padding:12,font:{size:11}}}}});
+}
+
+function newChart(id,type,data,opts){
+  const c=document.getElementById(id);
+  if(!c) return;
+  if(chartInstances[id]) try{chartInstances[id].destroy()}catch(e){}
+  chartInstances[id]=new Chart(c,{type,data,options:opts||{}});
+}
+
+// ═══ SECTOR TABS ═══
+
+function renderSectorTabs(){
+  SECTIONS.forEach(sec=>{
+    const p=document.getElementById('tab-'+sec.id);
+    if(!p) return;
+    const m=getCurrentMonth(),b=getCurrentBlock();
+    const d=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
+    const bl=b==='all'?Object.keys(BLOCKS):[b];
+    const isActive=currentTab===sec.id;
+
+    let html='<div class="kpi-grid">';
+    sec.indicators.slice(0,4).forEach(ind=>{
+      let sum=0;d.forEach(x=>sum+=Number(x.indicators[ind]||0));
+      html+=`<div class="kpi-card" style="background:${sec.color}08"><div class="kpi-icon" style="background:${sec.color}22;color:${sec.color}">📊</div><div class="kpi-value" style="color:${sec.color}">${formatNum(sum)}</div><div class="kpi-label">${ind}</div></div>`;
+    });
+    html+='</div><div class="panel-row cols-2">';
+    html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise ${sec.name}</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
+    html+=`<div class="card"><div class="card-header"><h3>${sec.icon} All Indicators</h3></div><div class="card-body no-pad"><div class="table-scroll" id="table${sec.id}Indicators"></div></div></div>`;
+    html+='</div><div class="panel-row cols-1"><div class="card"><div class="card-header"><h3>🔍 CLF-wise — '+sec.name+'</h3></div><div class="card-body no-pad"><div class="block-selector" id="clfSelector'+sec.id+'"></div><div class="clf-list" id="clfGrid'+sec.id+'"></div></div></div></div>';
+    p.innerHTML=html;
+
+    if(isActive){
+      renderSectorBlockChart(sec,d,bl);
+      renderSectorIndicatorTable(sec,d,bl);
+      renderClfDrillDown(sec,d,bl);
+    }
+  });
+}
+
+function renderSectorBlockChart(sec,data,blocks){
+  const cid='chart'+sec.id+'BlockInd';
+  const c=document.getElementById(cid);
+  if(!c) return;
+  const topI=sec.indicators.filter(i=>!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,10);
+  newChart(cid,'bar',{labels:topI.map(i=>i.length>28?i.substring(0,28)+'...':i),
+    datasets:blocks.map(b=>({label:b,data:topI.map(ind=>{let s=0;data.filter(d=>d.block===b).forEach(d=>s+=Number(d.indicators[ind]||0));return s}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'99',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3}))},chartOpts('vertical'));
+}
+
+function renderSectorIndicatorTable(sec,data,blocks){
+  const e=document.getElementById('table'+sec.id+'Indicators');
+  if(!e) return;
+  let h='<table class="data-table"><thead><tr><th>Indicator</th>';blocks.forEach(b=>h+=`<th>${b}</th>`);h+='<th>Total</th><th>Avg</th></tr></thead><tbody>';
+  sec.indicators.forEach(ind=>{
+    h+=`<tr><td style="max-width:240px">${ind}</td>`;let ts=0;
+    blocks.forEach(b=>{let s=0;data.filter(d=>d.block===b).forEach(d=>s+=Number(d.indicators[ind]||0));ts+=s;h+=`<td style="text-align:right">${formatNum(Math.round(s))}</td>`});
+    h+=`<td style="text-align:right;font-weight:700">${formatNum(Math.round(ts))}</td><td style="text-align:right;color:var(--accent-blue)">${formatNum(blocks.length>0?Math.round(ts/blocks.length):0)}</td></tr>`;
+  });
+  h+='</tbody></table>';
+  e.innerHTML=h;
+}
+
+function renderClfDrillDown(sec,data,blocks){
+  const sid='clfSelector'+sec.id, gid='clfGrid'+sec.id;
+  const se=document.getElementById(sid), ge=document.getElementById(gid);
+  if(!se||!ge) return;
+
+  const cv=document.getElementById('clfFilter').value;
+  let sp=null,sc=null;
+  if(cv!=='all'){const p=cv.split('|||');sp=p[0];sc=p.slice(1).join('|||')}
+  let ab=sp||blocks[0];
+
+  const render=(b)=>{
+    se.querySelectorAll('.block-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.block===b));
+    let clfs=BLOCKS[b]||[];
+    if(sp===b&&sc) clfs=clfs.filter(c=>c===sc);
+    let h='';
+    clfs.forEach(clf=>{
+      const d=data.find(x=>x.block===b&&x.clf===clf);let f=0,t=0;
+      if(d){sec.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++})}
+      const r=t>0?Math.round((f/t)*100):0;
+      const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
+      h+=`<div class="clf-card" onclick="openClfModal('${b}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+    });
+    ge.innerHTML=h;
+  };
+
+  if(sp&&sc) se.innerHTML=`<div class="block-btn active" data-block="${sp}">${sp}<span class="block-count">1</span></div>`;
+  else se.innerHTML=blocks.map(b=>`<div class="block-btn${b===ab?' active':''}" data-block="${b}" onclick="seClick('${sec.id}','${b}')">${b}<span class="block-count">${(BLOCKS[b]||[]).length}</span></div>`).join('');
+  render(ab);
+}
+
+window.seClick=function(sid,block){
+  const sec=SECTIONS.find(s=>s.id===sid);if(!sec)return;
+  const m=getCurrentMonth(),bf=getCurrentBlock();
+  const d=bf==='all'?getDataForMonth(m):getDataForBlockMonth(bf,m);
+  const bl=bf==='all'?Object.keys(BLOCKS):[bf];
+  const se=document.getElementById('clfSelector'+sid), ge=document.getElementById('clfGrid'+sid);
+  if(!se||!ge)return;
+  se.querySelectorAll('.block-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.block===block));
+  const clfs=BLOCKS[block]||[];
+  let h='';
+  clfs.forEach(clf=>{
+    const d2=d.find(x=>x.block===block&&x.clf===clf);let f=0,t=0;
+    if(d2){sec.indicators.forEach(i=>{t++;if(d2.indicators[i]!=='')f++})}
+    const r=t>0?Math.round((f/t)*100):0;
+    const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
+    h+=`<div class="clf-card" onclick="openClfModal('${block}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+  });
+  ge.innerHTML=h;
+};
+
+function openClfModal(block,clf,secId){
+  const m=getCurrentMonth();
+  const d=allData.find(x=>x.block===block&&x.clf===clf&&x.month===m);
+  const sec=SECTIONS.find(s=>s.id===secId);
+  document.getElementById('modalTitle').textContent=clf;
+  let html=`<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px"><strong>Block:</strong> ${block} &nbsp;|&nbsp; <strong>Month:</strong> ${m} &nbsp;|&nbsp; <strong>Sector:</strong> ${sec.name}</div><div class="indicator-grid">`;
+  sec.indicators.forEach(ind=>{
+    const v=d?d.indicators[ind]:'';
+    const has=v!==''&&v!==undefined;
+    html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${has?'var(--text-primary)':'var(--accent-red)'}">${has?formatNum(Number(v)):'<span style="color:var(--accent-red)">Missing</span>'}</div>${has?`<div class="ind-bar"><div class="ind-bar-fill" style="width:${Math.min(100,Number(v))}%;background:${sec.color}"></div></div>`:''}</div>`;
+  });
+  html+='</div>';
+  document.getElementById('modalBody').innerHTML=html;
+  document.getElementById('clfModal').classList.add('show');
+}
+
+function closeModal(){document.getElementById('clfModal').classList.remove('show')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+
+// ═══ QUALITY TAB ═══
+
+function renderQualityTab(){
+  const m=getCurrentMonth(),b=getCurrentBlock();
+  const data=b==='all'?getDataForMonth(m):getDataForBlockMonth(b,m);
+  const bl=b==='all'?Object.keys(BLOCKS):[b];
+  const qb={};
+  bl.forEach(x=>{let f=0,t=0;data.filter(d=>d.block===x).forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++}))});qb[x]=t>0?Math.round((f/t)*100):0});
+  newChart('chartQuality','bar',{labels:Object.keys(qb),datasets:[{label:'Data Quality %',data:Object.values(qb),backgroundColor:Object.values(qb).map(v=>v>80?'rgba(16,185,129,.6)':v>50?'rgba(245,158,11,.6)':'rgba(239,68,68,.6)'),borderRadius:6}]},{...chartOpts('vertical'),scales:{...chartOpts('vertical').scales,y:{...chartOpts('vertical').scales.y,max:100}}});
+
+  let issues=[];
+  data.forEach(d=>{let e=0;SECTIONS.forEach(s=>s.indicators.forEach(i=>{if(d.indicators[i]==='')e++}));if(e>10)issues.push({block:d.block,clf:shortClf(d.clf),type:'Missing Data',desc:e+' indicators missing',sev:e>20?'high':'medium'});const l=Number(d.indicators['No. of Loan Sanctioned']||0);const rp=Number(d.indicators['Loan Repayment']||0);if(rp>l&&l>0)issues.push({block:d.block,clf:shortClf(d.clf),type:'Abnormal Value',desc:'Repayment > sanctioned',sev:'high'});const np=Number(d.indicators['No. of SHG Having NPA']||0);const sg=Number(d.indicators['No. of SHG in CLF']||0);if(np>sg&&sg>0)issues.push({block:d.block,clf:shortClf(d.clf),type:'Inconsistency',desc:'NPA > SHG count',sev:'high'})});
+  let ih=issues.length===0?'<div class="empty-state"><div class="empty-icon">✅</div><p>No issues detected</p></div>':'';
+  issues.slice(0,20).forEach(iss=>{ih+=`<div class="quality-item"><div class="quality-dot" style="background:${iss.sev==='high'?'var(--accent-red)':'var(--accent-amber)'}"></div><div class="quality-info"><div class="q-title">${iss.type}</div><div class="q-desc">${iss.block} — ${iss.clf}: ${iss.desc}</div></div><span class="badge badge-${iss.sev==='high'?'red':'amber'}">${iss.sev}</span></div>`});
+  document.getElementById('dataIssuesList').innerHTML=ih;
+
+  const ms=SECTIONS.map(s=>{let mi=0,t=0;data.forEach(d=>s.indicators.forEach(i=>{t++;if(d.indicators[i]==='')mi++}));return{n:s.name.replace(' Report','').replace(' Livelihood',''),r:t>0?Math.round((mi/t)*100):0}});
+  newChart('chartMissingSector','bar',{labels:ms.map(s=>s.n),datasets:[{label:'Missing %',data:ms.map(s=>s.r),backgroundColor:'rgba(239,68,68,.5)',borderRadius:4}]},chartOpts('vertical'));
+
+  let ah='';
+  data.forEach(d=>{const l=Number(d.indicators['Amount Sanctioned']||0);const rp=Number(d.indicators['Loan Repayment']||0);if(l>0&&rp>l*1.5)ah+=`<div class="quality-item"><div class="quality-dot" style="background:var(--accent-red)"></div><div class="quality-info"><div class="q-title">High Repayment Ratio</div><div class="q-desc">${d.block} — ${shortClf(d.clf)}: Repayment ₹${formatNum(rp)} > 150% of ₹${formatNum(l)}</div></div></div>`;const id=Number(d.indicators['Idle fund']||0);if(id>100000)ah+=`<div class="quality-item"><div class="quality-dot" style="background:var(--accent-amber)"></div><div class="quality-info"><div class="q-title">High Idle Funds</div><div class="q-desc">${d.block} — ${shortClf(d.clf)}: ₹${formatNum(id)} idle</div></div></div>`});
+  if(!ah)ah='<div class="empty-state"><div class="empty-icon">✅</div><p>No abnormal values</p></div>';
+  document.getElementById('abnormalValuesList').innerHTML=ah;
+}
+
+// ═══ TRENDS TAB ═══
+
+function renderTrendsTab(){
+  const months=[];
+  const now=new Date();
+  for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'))}
+  const b=getCurrentBlock(),bl=b==='all'?Object.keys(BLOCKS):[b];
+
+  const lT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of Loan Sanctioned']||0),0));
+  const sT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG in CLF']||0),0));
+  const qT=months.map(m=>{let f=0,t=0;getDataForMonth(m).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0});
+  const ml=months.map(m=>{const[y,mo]=m.split('-');return['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mo]+' '+y.slice(2)});
+
+  newChart('chartTrendMain','line',{labels:ml,datasets:[{label:'Loans Sanctioned',data:lT,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.4,pointRadius:4},{label:'SHGs',data:sT,borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.1)',fill:true,tension:.4,pointRadius:4,yAxisID:'y1'},{label:'Data Quality %',data:qT,borderColor:'#f59e0b',borderDash:[5,5],tension:.4,pointRadius:4,yAxisID:'y2'}]},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{position:'left',grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a'}},y1:{position:'right',grid:{display:false},ticks:{color:'#10b981'}},y2:{display:false,min:0,max:100}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
+
+  newChart('chartBlockTrend','line',{labels:ml,datasets:bl.map(b=>({label:b,data:months.map(m=>{let f=0,t=0;getDataForBlockMonth(b,m).forEach(x=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{t++;if(x.indicators[i]!=='')f++}))});return t>0?Math.round((f/t)*100):0}),borderColor:BLOCK_COLORS[b]||'#666',backgroundColor:(BLOCK_COLORS[b]||'#666')+'15',fill:false,tension:.4,pointRadius:4,borderWidth:2}))},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{min:0,max:100,grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',callback:v=>v+'%'}}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
+
+  const aT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Amount Sanctioned']||0),0));
+  const rT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Loan Repayment']||0),0));
+  const nT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['No. of SHG Having NPA']||0),0));
+  newChart('chartFinTrend','bar',{labels:ml,datasets:[{label:'Amount Sanctioned',data:aT,backgroundColor:'rgba(59,130,246,.6)',borderRadius:3},{label:'Loan Repayment',data:rT,backgroundColor:'rgba(16,185,129,.6)',borderRadius:3},{label:'NPA Count',data:nT,backgroundColor:'rgba(239,68,68,.6)',borderRadius:3}]},chartOpts('vertical'));
+
+  const pT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Producer Group Formation']||0),0));
+  const eT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Farm Entrepreneur']||0),0));
+  const lkT=months.map(m=>getDataForMonth(m).reduce((s,x)=>s+Number(x.indicators['Lakhpati Didi']||0),0));
+  newChart('chartLiveTrend','line',{labels:ml,datasets:[{label:'Producer Groups',data:pT,borderColor:'#14b8a6',backgroundColor:'rgba(20,184,166,.1)',fill:true,tension:.4,pointRadius:4},{label:'Farm Entrepreneurs',data:eT,borderColor:'#f59e0b',tension:.4,pointRadius:4},{label:'Lakhpati Didi',data:lkT,borderColor:'#8b5cf6',tension:.4,pointRadius:4}]},{responsive:true,maintainAspectRatio:false,scales:{x:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a',font:{size:10}}},y:{grid:{color:'rgba(42,45,62,.4)'},ticks:{color:'#6b6f8a'}}},plugins:{legend:{labels:{color:'#9498b3',padding:12}}}});
+}
+
+// ═══ CLF DROPDOWN ═══
+
+function updateClfDropdown(){
+  const b=document.getElementById('blockFilter').value;
+  const el=document.getElementById('clfFilter');
+  const pv=el.value;
+  el.innerHTML='<option value="all">All CLFs</option>';
+  const bl=b==='all'?Object.keys(BLOCKS):[b];
+  bl.forEach(x=>{(BLOCKS[x]||[]).forEach(c=>{const o=document.createElement('option');o.value=x+'|||'+c;o.textContent='['+x+'] '+c;el.appendChild(o)})});
+  if(pv&&[...el.options].some(o=>o.value===pv)) el.value=pv;
+}
+
+// ═══ INIT ═══
+
+async function init(){
+  updateClfDropdown();
+  // Set default month
+  const now=new Date();
+  document.getElementById('monthFilter').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const ye=document.getElementById('yearFilter');
+  for(let y=now.getFullYear();y>=now.getFullYear()-2;y--)ye.innerHTML+=`<option value="${y}">${y}</option>`;
+
+  // Try to fetch from Google Sheets
+  await fetchFromSheet();
+  fullRefresh();
+}
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
