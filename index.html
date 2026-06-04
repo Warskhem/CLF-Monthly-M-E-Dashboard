@@ -412,21 +412,81 @@ async function fetchFromSheet(){
 
 function convertSummaryData(d){
   if(!d||typeof d!=='object'||Array.isArray(d)) return null;
+  // ── NEW FORMAT: submissions array with per-CLF data ──
+  if(d.submissions && Array.isArray(d.submissions) && d.submissions.length>0){
+    const records=[];
+    d.submissions.forEach(sub=>{
+      let month=sub.month;
+      // Normalize "Mon Jun 01 2026 12:30:00 GMT+0530 (India Standard Time)" → "2026-06"
+      if(month && typeof month==='string' && month.includes('GMT')){
+        const date=new Date(month);
+        if(!isNaN(date.getTime())) month=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0');
+      } else if(month && typeof month==='string' && /^\d{4}-\d{2}$/.test(month)){
+        // already in YYYY-MM
+      } else if(month){
+        const date=new Date(month);
+        if(!isNaN(date.getTime())) month=date.getFullYear()+'-'+String(date.getMonth()+1).padStart(2,'0');
+      }
+      records.push({
+        block: sub.block,
+        clf: sub.clf,
+        month: month,
+        reportedBy: sub.reportedBy,
+        submissionDate: sub.submissionDate,
+        indicators: sub.indicators || {}
+      });
+    });
+    window._chartExtras={fundBreakdown:d.fundBreakdown||{},fnhw:d.fnhw||{},loanTrend:d.loanTrend||{},blockCompare:d.blockCompare||{}};
+    return records;
+  }
+  // ── LEGACY FORMAT: aggregate object with field paths ──
   if(typeof d.loansSanctioned==='undefined'&&typeof d.totalSHGs==='undefined') return null;
   const now=new Date();
   const month=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const IND_MAP={
-    'No. of Loan Sanctioned':'loansSanctioned','Amount Sanctioned':'amountSanctioned','Loan Repayment':'loanRepayment','Defaulter Loan Repayment':'defaulterRepayment','VGF':'','PMFME Fund':'','MKSP':'','SVEP':'',
-    'No. of SHG in CLF':'totalSHGs','No. of Members Having Aadhaar':'aadhaarCovered','No. of SHGs Completed LokOS Profiling':'lokosSHGs','No. of SHGs Completed Transaction':'lokosShgTxn','No. of VOs Completed LokOS Profiling':'lokosVOs','No. of VOs Completed Transaction':'lokosVoTxn','No. of Cadre Registered in LokOS':'cadresLokos','No. of VOs having Bank A/C':'voBankAc','No. of SHGs having Bank A/C':'bankLoanSHGs',
-    'Training Received by CLF':'trainingCLF','Training Received by VO':'trainingVO','Training Received by SHG':'trainingSHG','Training Received by Cadres':'trainingCadre','Cadre MBK':'mbkAwMcp','Cadre MCP':'mcpCompleted','Cadre Bank Sakhi':'bankSakhi','Cadre Financial Literacy':'financialLiteracy','Cadre Krishi Sakhi':'krishiSakhi','Cadre Pashu Sakhi':'pashuSakhi','Cadre CRP-EP':'crpEpIcrpAcrp',
-    'SHG Grade A':'shgGradeA','SHG Grade B':'shgGradeB','SHG Grade C':'shgGradeC','SHG Grade D':'shgGradeD','VO Grade A':'voGradeA','VO Grade B':'voGradeB','VO Grade C':'voGradeC','VO Grade D':'voGradeD','SHG Annual Audit Completed':'auditSHG','VO Annual Audit Completed':'auditVO','SHG Completed MCP':'mcpCompleted','Functional Sub Committee':'subCommittees',
-    'No. of PMJJBY':'pmjjby','No. of PMSBY':'pmsby','No. of MHIS':'mhis','No. of APY':'apy','No. of FLC Conducted at Saksham Center':'flcSessions',
-    'Producer Group Formation':'producerGroups','MK Mobilised under PG':'mksMobilised','MK Natural Farming':'naturalFarmingVillages','Area Natural Farming (acres)':'naturalFarmingArea','Villages Livestock Intervention':'intLivestock','Villages Organic Farming':'intOrganic',
-    'IFC Villages Covered':'ifcVillages','IFC Natural Farming Farmers':'ifcFarmers','IFC Natural Farming Area (acres)':'ifcArea','IFC PG Received Funds':'ifcPGFunds',
-    'MK Loan Livestock CIF (Amount)':'livelihoodLoans.livestockCIF','MK Loan Livestock Bank (Amount)':'livelihoodLoans.livestockBank','MK Loan Agri CIF (Amount)':'livelihoodLoans.agriCIF','MK Loan Agri Bank (Amount)':'livelihoodLoans.agriBank',
+    'No. of Loan Sanctioned':'loansSanctioned','Amount Sanctioned':'amountSanctioned','Loan Repayment':'loanRepayment','Defaulter Loan Repayment':'defaulterRepayment',
+    'No. of SHG Having Active Loan':'shgActiveLoan','No. of SHG Having NPA':'shgNPA','Receipt A/c':'receipt','Payment A/c':'payment',
+    'Loan Demand Principal (CIF)':'loanDemandCIF','Loan Received Principal (CIF)':'loanReceivedCIF','Interest Demand (CIF)':'interestDemand','Interest Received':'interestReceived',
+    'Idle fund':'idleFund','Loan Outstanding':'loanOutstanding','CIF from Mission':'cifFromMission','CIF Returned from VO':'cifReturnedFromVO',
+    'VGF':'vgf','PMFME Fund':'pmfmeFund','MKSP':'mksp','SVEP':'svep',
+    'No. of SHG in CLF':'totalSHGs','No. of Members Having Aadhaar':'aadhaarCovered','No. of SHGs Completed LokOS Profiling':'lokosSHGs','No. of SHGs Completed Transaction':'lokosShgTxn','No. of VOs Completed LokOS Profiling':'lokosVOs','No. of VOs Completed Transaction':'lokosVoTxn','No. of Cadre Registered in LokOS':'cadresLokos','No. of VOs having Bank A/C':'voBankAc','No. of SHGs having Bank A/C':'shgBankAc',
+    'Training Received by CLF':'trainingCLF','Training Received by VO':'trainingVO','Training Received by SHG':'trainingSHG','Training Received by Cadres':'trainingCadre',
+    'Cadre AW':'cadreAW','Cadre MBK':'mbkAwMcp','Cadre MCP':'mcpCompleted','Cadre BRT':'cadreBRT','Cadre CGHA':'cadreCGHA','Cadre LRP':'cadreLRP',
+    'Cadre Bank Sakhi':'bankSakhi','Cadre Financial Literacy':'financialLiteracy','Cadre Krishi Sakhi':'krishiSakhi','Cadre Pashu Sakhi':'pashuSakhi',
+    'Cadre CRP-EP':'cadreCRP_EP','Cadre ACRP':'cadreACRP','Cadre MIS':'cadreMIS','Cadre ICRP':'cadreICRP',
+    'SHG Grade A':'shgGradeA','SHG Grade B':'shgGradeB','SHG Grade C':'shgGradeC','SHG Grade D':'shgGradeD',
+    'VO Grade A':'voGradeA','VO Grade B':'voGradeB','VO Grade C':'voGradeC','VO Grade D':'voGradeD',
+    'SHG Annual Audit Completed':'auditSHG','VO Annual Audit Completed':'auditVO','SHG Completed MCP':'shgCompletedMCP','Functional Sub Committee':'subCommittees',
+    'Newly Formed SHG':'newlyFormedSHG','Mobilized in Existing SHG':'mobilizedInExistingSHG','Special SHG':'specialSHG','Follow Up Pregnant Women':'followUpPregnantWomen',
+    'FNHW Training':'fnhwTraining','Child Cadre Support':'childCadreSupport','Transit Home Report':'transitHome',
+    'FNHW Monthly Agenda':'fnhwMonthlyAgenda','Community Event':'communityEvent','VHND Programme':'vhndProgramme',
+    'VPRP Demand Realization':'vprpDemandRealization','Gram Sabha Meeting':'gramSabhaMeeting',
+    'No. of PMJJBY':'pmjjby','No. of PMSBY':'pmsby','No. of MHIS':'mhis','No. of APY':'apy',
+    'No. of SHGs Avail Loan From Bank':'bankLoanSHGs','No. of FLC Conducted at Saksham Center':'flcSessions',
+    'Training Agri/Horti':'trainingAgriHorti','MK Livestock Intervention':'mkLivestockIntervention','Agri Nutri Garden HH':'agriNutriGardenHH',
+    'Villages Farm Livelihood':'villagesFarmLivelihood','Krishi Sakhi':'krishiSakhi','Pashu Sakhi':'pashuSakhi',
+    'Producer Group Formation':'producerGroups','MK Mobilised under PG':'mksMobilised','Udhyog Sakhi':'udhyogSakhi',
+    'MK Natural Farming':'naturalFarmingVillages','Area Natural Farming (acres)':'naturalFarmingArea',
+    'Villages Livestock Intervention':'intLivestock','Villages Organic Farming':'intOrganic',
+    'Farm Entrepreneur':'farmEntrepreneur','MK Pig Insurance':'mkPigInsurance','No of Pig Insured':'noOfPigInsured',
+    'MK KVK':'mkKVK','MK AH Veterinary':'mkAHVeterinary','MK Agriculture':'mkAgriculture',
+    'MK Horticulture':'mkHorticulture','MK Fisheries':'mkFisheries','MK ATMA':'mkATMA','MK MGNREGA':'mkMGNREGA',
+    'IFC Villages Covered':'ifcVillages','IFC Natural Farming Farmers':'ifcFarmers','IFC Natural Farming Area (acres)':'ifcArea',
+    'IFC Input Shop':'ifcInputShop','IFC Processing Centres':'ifcProcessingCentres','IFC Entrepreneurs':'ifcEntrepreneurs',
+    'IFC PG Agri/Horti':'ifcPGAgriHorti','IFC PG Livestock':'ifcPGLivestock','IFC PG Received Funds':'ifcPGFunds',
+    'IFC Business Plan PG':'ifcBusinessPlanPG','IFC Models':'ifcModels',
+    'MK Loan Livestock CIF (Amount)':'livelihoodLoans.livestockCIF','MK Loan Livestock Bank (Amount)':'livelihoodLoans.livestockBank',
+    'MK Loan Agri CIF (Amount)':'livelihoodLoans.agriCIF','MK Loan Agri Bank (Amount)':'livelihoodLoans.agriBank',
     'Potential Lakhpati Didi':'lakhpatiTarget','Lakhpati Didi':'lakhpatiAchieved',
-    'PMFME Applications':'pmfmeApplications','PMFME Beneficiaries Repayment':'pmfmeBeneficiaries','PMFME Amount':'pmfmeAmount','Mudra Applications':'mudraLoans','Mudra Amount':'mudraAmount','PMEGP Applications':'pmegp','PMEGP Amount':'pmegpAmount','Enterprise Individual':'totalEnterprises','FSSAI':'fssai','UAM':'uam','GST':'gst','Events/Fair/Melas':'events','Sales Amount':'totalSales','TCPC Sales Amount':'tcpcSales',
-    'PLD Non-Farm':'pldNonFarm','PLD Financial Linked':'pldFinancialLinked','PLD Income <1L':'incLt1L','PLD Income >1L':'incGt1L','PLD Income 2-3L':'inc2to3L','PLD Income 3-5L+':'inc3to5L','Individual Bank Loan (No)':'indEnterprises','Group Bank Loan (No)':'grpEnterprises'
+    'PMFME Applications':'pmfmeApplications','PMFME Beneficiaries Repayment':'pmfmeBeneficiaries','PMFME Amount':'pmfmeAmount',
+    'Mudra Applications':'mudraLoans','Mudra Amount':'mudraAmount','PMEGP Applications':'pmegp','PMEGP Amount':'pmegpAmount',
+    'Individual Bank Loan (No)':'indEnterprises','Individual Bank Loan (Amount)':'indBankLoanAmt','Individual Bank Loan (Dose)':'indBankLoanDose',
+    'Group Bank Loan (No)':'grpEnterprises','Group Bank Loan (Amount)':'grpBankLoanAmt','Group Bank Loan (Dose)':'grpBankLoanDose',
+    'Enterprise Individual':'totalEnterprises','Enterprise Group':'',
+    'FSSAI':'fssai','UAM':'uam','GST':'gst','Events/Fair/Melas':'events','Sales Amount':'totalSales','TCPC Sales Amount':'tcpcSales',
+    'PLD Non-Farm':'pldNonFarm','PLD Financial Linked':'pldFinancialLinked',
+    'PLD Income <1L':'incLt1L','PLD Income >1L':'incGt1L','PLD Income 2-3L':'inc2to3L','PLD Income 3-5L+':'inc3to5L',
+    'PLD Convergence':'pldConvergence'
   };
   function getVal(obj,path){
     if(!path) return '';const parts=path.split('.');let v=obj;
@@ -435,8 +495,6 @@ function convertSummaryData(d){
   }
   const indicators={};
   SECTIONS.forEach(sec=>{sec.indicators.forEach(ind=>{const v=getVal(d,IND_MAP[ind]||'');indicators[ind]=v!==''&&v!==undefined&&v!==null?String(v):''})});
-  const hasData=Object.values(indicators).some(v=>v!==''&&Number(v)>0);
-  if(!hasData) return null;
   const records=[],thisMonth=month;
   Object.keys(BLOCKS).forEach(block=>{records.push({block,clf:'All CLFs',month:thisMonth,reportedBy:'System',submissionDate:'',indicators:{...indicators}})});
   window._chartExtras={fundBreakdown:d.fundBreakdown||{},fnhw:d.fnhw||{},loanTrend:d.loanTrend||{},blockCompare:d.blockCompare||{}};
