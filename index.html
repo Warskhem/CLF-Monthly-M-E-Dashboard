@@ -312,6 +312,33 @@ const SECTIONS=[
 
 const BLOCK_COLORS={Mawshynrut:'#3b82f6',Nongstoin:'#10b981',Rambrai:'#f59e0b',Shallang:'#ef4444','Ri-Muliang':'#8b5cf6'};
 
+// Indicators whose values are comma-separated text (training names) — not numbers
+const TEXT_INDICATORS = new Set([
+  'Training Received by CLF',
+  'Training Received by VO',
+  'Training Received by SHG',
+  'Training Received by Cadres'
+]);
+
+function isTextIndicator(name){return TEXT_INDICATORS.has(name)}
+function getTextCount(val){
+  if(val===''||val===null||val===undefined) return 0;
+  if(typeof val!=='string') return 0;
+  return val.split(',').map(s=>s.trim()).filter(s=>s.length>0).length;
+}
+function getTextList(val){
+  if(val===''||val===null||val===undefined) return [];
+  if(typeof val!=='string') return [];
+  return val.split(',').map(s=>s.trim()).filter(s=>s.length>0);
+}
+function formatVal(ind,val){
+  if(val===''||val===null||val===undefined) return '—';
+  if(isTextIndicator(ind)) return getTextCount(val)+' trainings';
+  const n=Number(val);
+  if(isNaN(n)) return String(val);
+  return formatNum(n);
+}
+
 let allData = [];
 let chartInstances = {};
 let dataSource = 'none';
@@ -344,6 +371,8 @@ function getPrevMonth(m){
 }
 
 function formatNum(n){
+  if(n===null||n===undefined||isNaN(Number(n))) return '—';
+  n=Number(n);
   if(n>=10000000) return (n/10000000).toFixed(1)+'Cr';
   if(n>=100000) return (n/100000).toFixed(1)+'L';
   if(n>=1000) return (n/1000).toFixed(1)+'K';
@@ -824,8 +853,17 @@ function renderSectorTabs(){
 
     let html='<div class="kpi-grid">';
     sec.indicators.slice(0,4).forEach(ind=>{
-      let sum=0;d.forEach(x=>sum+=Number(x.indicators[ind]||0));
-      html+=`<div class="kpi-card" style="background:${sec.color}08"><div class="kpi-icon" style="background:${sec.color}22;color:${sec.color}">📊</div><div class="kpi-value" style="color:${sec.color}">${formatNum(sum)}</div><div class="kpi-label">${ind}</div></div>`;
+      let displayVal, subLabel='';
+      if(isTextIndicator(ind)){
+        let totalCount=0, received=0;
+        d.forEach(x=>{const v=x.indicators[ind]||'';if(v&&String(v).trim()!==''){received++;totalCount+=getTextCount(v)}});
+        displayVal=received+'/'+d.length;
+        subLabel= totalCount>0 ? totalCount+' trainings' : 'none';
+      } else {
+        let sum=0;d.forEach(x=>{const v=Number(x.indicators[ind]||0);if(!isNaN(v))sum+=v});
+        displayVal=formatNum(sum);
+      }
+      html+=`<div class="kpi-card" style="background:${sec.color}08"><div class="kpi-icon" style="background:${sec.color}22;color:${sec.color}">${isTextIndicator(ind)?'📋':'📊'}</div><div class="kpi-value" style="color:${sec.color}">${displayVal}</div><div class="kpi-label">${ind}</div>${subLabel?`<div class="kpi-trend neutral" style="font-size:10px">${subLabel}</div>`:''}</div>`;
     });
     html+='</div><div class="panel-row cols-2">';
     html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise ${sec.name}</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
@@ -845,9 +883,9 @@ function renderSectorBlockChart(sec,data,blocks){
   const cid='chart'+sec.id+'BlockInd';
   const c=document.getElementById(cid);
   if(!c) return;
-  const topI=sec.indicators.filter(i=>!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,10);
+  const topI=sec.indicators.filter(i=>!isTextIndicator(i)&&!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,10);
   newChart(cid,'bar',{labels:topI.map(i=>i.length>28?i.substring(0,28)+'...':i),
-    datasets:blocks.map(b=>({label:b,data:topI.map(ind=>{let s=0;data.filter(d=>d.block===b).forEach(d=>s+=Number(d.indicators[ind]||0));return s}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'99',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3}))},chartOpts('vertical'));
+    datasets:blocks.map(b=>({label:b,data:topI.map(ind=>{let s=0;data.filter(d=>d.block===b).forEach(d=>{const v=Number(d.indicators[ind]||0);if(!isNaN(v))s+=v});return s}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'99',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3}))},chartOpts('vertical'));
 }
 
 function renderSectorIndicatorTable(sec,data,blocks){
@@ -855,9 +893,28 @@ function renderSectorIndicatorTable(sec,data,blocks){
   if(!e) return;
   let h='<table class="data-table"><thead><tr><th>Indicator</th>';blocks.forEach(b=>h+=`<th>${b}</th>`);h+='<th>Total</th><th>Avg</th></tr></thead><tbody>';
   sec.indicators.forEach(ind=>{
-    h+=`<tr><td style="max-width:240px">${ind}</td>`;let ts=0;
-    blocks.forEach(b=>{let s=0;data.filter(d=>d.block===b).forEach(d=>s+=Number(d.indicators[ind]||0));ts+=s;h+=`<td style="text-align:right">${formatNum(Math.round(s))}</td>`});
-    h+=`<td style="text-align:right;font-weight:700">${formatNum(Math.round(ts))}</td><td style="text-align:right;color:var(--accent-blue)">${formatNum(blocks.length>0?Math.round(ts/blocks.length):0)}</td></tr>`;
+    const isText=isTextIndicator(ind);
+    h+=`<tr><td style="max-width:240px">${ind}</td>`;
+    let ts=0, tCount=0;
+    blocks.forEach(b=>{
+      const bdata=data.filter(d=>d.block===b);
+      if(isText){
+        let totalCount=0, received=0;
+        bdata.forEach(d=>{const v=d.indicators[ind]||'';if(v&&String(v).trim()!==''){received++;totalCount+=getTextCount(v)}});
+        ts+=totalCount; tCount+=received;
+        h+=`<td style="text-align:right">${bdata.length>0?received+'/'+bdata.length:'—'}</td>`;
+      } else {
+        let s=0;
+        bdata.forEach(d=>{const v=Number(d.indicators[ind]||0);if(!isNaN(v))s+=v});
+        ts+=s; tCount+=1;
+        h+=`<td style="text-align:right">${formatNum(Math.round(s))}</td>`;
+      }
+    });
+    if(isText){
+      h+=`<td style="text-align:right;font-weight:700">${ts} <span style="font-weight:400;color:var(--text-muted);font-size:10px">trainings</span></td><td style="text-align:right;color:var(--accent-blue)">${tCount} CLFs</td></tr>`;
+    } else {
+      h+=`<td style="text-align:right;font-weight:700">${formatNum(Math.round(ts))}</td><td style="text-align:right;color:var(--accent-blue)">${formatNum(blocks.length>0?Math.round(ts/blocks.length):0)}</td></tr>`;
+    }
   });
   h+='</tbody></table>';
   e.innerHTML=h;
@@ -922,7 +979,14 @@ function openClfModal(block,clf,secId){
   sec.indicators.forEach(ind=>{
     const v=d?d.indicators[ind]:'';
     const has=v!==''&&v!==undefined;
-    html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${has?'var(--text-primary)':'var(--accent-red)'}">${has?formatNum(Number(v)):'<span style="color:var(--accent-red)">Missing</span>'}</div>${has?`<div class="ind-bar"><div class="ind-bar-fill" style="width:${Math.min(100,Number(v))}%;background:${sec.color}"></div></div>`:''}</div>`;
+    if(isTextIndicator(ind)){
+      const items=getTextList(v);
+      html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${has?'var(--text-primary)':'var(--accent-red)'};font-size:13px">${has?items.length+' trainings':'<span style="color:var(--accent-red)">Missing</span>'}</div>${has?`<div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.3">${items.map(t=>t.length>40?t.substring(0,40)+'…':t).join(', ')}</div>`:''}</div>`;
+    } else {
+      const n=has?Number(v):0;
+      const valid=has&&!isNaN(n);
+      html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${valid?'var(--text-primary)':'var(--accent-red)'}">${valid?formatNum(n):'<span style="color:var(--accent-red)">Missing</span>'}</div>${valid?`<div class="ind-bar"><div class="ind-bar-fill" style="width:${Math.min(100,n)}%;background:${sec.color}"></div></div>`:''}</div>`;
+    }
   });
   html+='</div>';
   document.getElementById('modalBody').innerHTML=html;
