@@ -365,50 +365,96 @@ function setDataSource(src, msg){
 async function fetchFromSheet(){
   document.getElementById('loadingOverlay').classList.remove('hidden');
   setDataSource('none','Connecting...');
-  // 10s timeout
   const ac=new AbortController();
-  const timer=setTimeout(()=>ac.abort(),10000);
+  const timer=setTimeout(()=>ac.abort(),30000);
   try{
-    const res=await fetch(SHEET_URL,{method:'GET',signal:ac.signal,redirect:'follow'});
+    const url=SHEET_URL+'?action=getAll&t='+Date.now();
+    const res=await fetch(url,{method:'GET',signal:ac.signal});
     clearTimeout(timer);
-    if(!res.ok) throw new Error('HTTP '+res.status);
+    if(!res.ok) throw new Error('HTTP '+res.status+' — ensure Apps Script is deployed as Web App with Anyone access');
     const txt=await res.text();
-    // Try to parse as JSON
+    // Try JSON parse
     let data;
-    try{data=JSON.parse(txt)}catch(e){data=txt}
-    // Check if it's an error message or actual data
-    if(typeof data==='object' && data!==null && data.error){
-      console.log('Sheet response:', data.error);
-      setDataSource('none',data.error);
-      document.getElementById('loadingOverlay').classList.add('hidden');
-      return false;
+    try{data=JSON.parse(txt)}catch(e){console.log('Raw response (first 200 chars):',txt.slice(0,200));setDataSource('none','Not JSON: '+(txt.slice(0,60).replace(/\n/g,' ')));document.getElementById('loadingOverlay').classList.add('hidden');return false}
+
+    if(data && typeof data==='object' && data.error){setDataSource('none',data.error);document.getElementById('loadingOverlay').classList.add('hidden');return false}
+
+    // Format 1: {headers:[...], rows:[[...]]}
+    if(data && Array.isArray(data.rows)){
+      allData = parseRowsAsRecords(data.headers||[], data.rows);
+      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
     }
-    // If data is an array, it's actual submissions
-    if(Array.isArray(data) && data.length>0){
+
+    // Format 2: [[header1,header2,...],[val1,val2,...], ...]
+    if(Array.isArray(data) && data.length>1 && Array.isArray(data[0])){
+      allData = parseRowsAsRecords(data[0], data.slice(1));
+      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
+    }
+
+    // Format 3: [{block,clf,month,indicators}]
+    if(Array.isArray(data) && data.length){
       allData = parseSheetData(data);
-      setDataSource('sheet','Loaded');
-      document.getElementById('loadingOverlay').classList.add('hidden');
-      return true;
+      if(allData.length){setDataSource('sheet','Loaded');document.getElementById('loadingOverlay').classList.add('hidden');return true}
     }
-    // If data is a string or different format, try parsing as JSON array
-    if(typeof data==='string' && data.trim().startsWith('[')){
-      const parsed=JSON.parse(data);
-      if(Array.isArray(parsed) && parsed.length>0){
-        allData=parseSheetData(parsed);
-        setDataSource('sheet','Loaded');
-        document.getElementById('loadingOverlay').classList.add('hidden');
-        return true;
-      }
-    }
+
     setDataSource('none','No data in sheet');
     document.getElementById('loadingOverlay').classList.add('hidden');
     return false;
   }catch(e){
-    console.warn('Sheet fetch failed:', e);
-    setDataSource('none','Connection error');
+    console.warn('Sheet fetch failed:', e.message);
+    setDataSource('none',e.name==='AbortError'?'Timed out — check URL & deployment':'Error: '+e.message);
     document.getElementById('loadingOverlay').classList.add('hidden');
     return false;
   }
+}
+
+function parseRowsAsRecords(headers, rows){
+  if(!headers.length||!rows.length) return [];
+  // Use original header names (do NOT mangle them)
+  const h=headers.map(h=>String(h).trim());
+  // Find key columns by original name
+  const idxBlock=h.findIndex(x=>/block/i.test(x));
+  const idxClf=h.findIndex(x=>/clf/i.test(x)||/cl$/i.test(x));
+  const idxMonth=h.findIndex(x=>/month|reporting|report.*month/i.test(x));
+  const idxTs=h.findIndex(x=>/timestamp|date|submission/i.test(x));
+  if(idxBlock<0||idxMonth<0) return [];
+  return rows.map(row=>{
+    if(!Array.isArray(row)) return null;
+    const block=String(row[idxBlock]||'').trim();
+    const month=String(row[idxMonth]||'').trim();
+    if(!block||!month) return null;
+    const clf=idxClf>=0?String(row[idxClf]||'').trim():'';
+    const indicators={};
+    h.forEach((name,i)=>{
+      if(i===idxBlock||i===idxClf||i===idxMonth||i===idxTs) return;
+      const val=row[i]!==undefined&&row[i]!==null?String(row[i]):'';
+      indicators[name]=val;
+    });
+    return {block,clf,month,reportedBy:'',submissionDate:'',indicators};
+  }).filter(x=>x);
+}
+
+function parseSheetData(arr){
+  // Expect array of objects with {block, clf, month, indicators, ...}
+  return arr.map(item=>{
+    if(!item || !item.block || !item.month) return null;
+    const indicators={};
+    // Collect all known indicator values from the item
+    SECTIONS.forEach(sec=>{
+      sec.indicators.forEach(ind=>{
+        const v = item.indicators ? item.indicators[ind] : item[ind];
+        indicators[ind] = v!==undefined && v!==null ? String(v) : '';
+      });
+    });
+    return {
+      block: item.block,
+      clf: item.clf || '',
+      month: item.month,
+      reportedBy: item.reportedBy || '',
+      submissionDate: item.submissionDate || '',
+      indicators
+    };
+  }).filter(x=>x!==null);
 }
 
 function parseSheetData(arr){
