@@ -1097,7 +1097,7 @@ async function init(){
   const now=new Date();
   document.getElementById('monthFilter').value=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
   const ye=document.getElementById('yearFilter');
-  for(let y=now.getFullYear();y>=now.getFullYear()-2;y--)ye.innerHTML+=`<option value="${y}">${y}</option>`;
+  for(let y=2026;y<=2035;y++)ye.innerHTML+=`<option value="${y}">${y}</option>`;
 
   // Try to fetch from Google Sheets
   await fetchFromSheet();
