@@ -373,6 +373,7 @@ const CORS_PROXIES=[
 async function fetchFromSheet(){
   document.getElementById('loadingOverlay').classList.remove('hidden');
   setDataSource('none','Connecting...');
+  let connectedEmpty=false;
   for(let pi=0;pi<CORS_PROXIES.length;pi++){
     const proxy=CORS_PROXIES[pi];
     const ac=new AbortController();
@@ -401,9 +402,10 @@ async function fetchFromSheet(){
         window._chartExtras=data;
         return true;
       }
+      connectedEmpty=true;
     }catch(e){clearTimeout(timer);continue}
   }
-  setDataSource('none','Could not connect');
+  setDataSource('none',connectedEmpty?'No data in sheet (all zeros)':'Could not connect');
   document.getElementById('loadingOverlay').classList.add('hidden');
   return false;
 }
@@ -433,6 +435,8 @@ function convertSummaryData(d){
   }
   const indicators={};
   SECTIONS.forEach(sec=>{sec.indicators.forEach(ind=>{const v=getVal(d,IND_MAP[ind]||'');indicators[ind]=v!==''&&v!==undefined&&v!==null?String(v):''})});
+  const hasData=Object.values(indicators).some(v=>v!==''&&Number(v)>0);
+  if(!hasData) return null;
   const records=[],thisMonth=month;
   Object.keys(BLOCKS).forEach(block=>{records.push({block,clf:'All CLFs',month:thisMonth,reportedBy:'System',submissionDate:'',indicators:{...indicators}})});
   window._chartExtras={fundBreakdown:d.fundBreakdown||{},fnhw:d.fnhw||{},loanTrend:d.loanTrend||{},blockCompare:d.blockCompare||{}};
