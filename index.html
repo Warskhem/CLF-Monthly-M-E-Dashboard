@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CLF M&E Dashboard — West Khasi Hills</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg-primary:#0f1117;--bg-secondary:#161822;--bg-card:#1c1f2e;--bg-card-hover:#222640;--border:#2a2d3e;--border-light:#353849;--text-primary:#e4e6f0;--text-secondary:#9498b3;--text-muted:#6b6f8a;--accent-blue:#3b82f6;--accent-green:#10b981;--accent-amber:#f59e0b;--accent-red:#ef4444;--accent-purple:#8b5cf6;--accent-teal:#14b8a6;--shadow-md:0 4px 12px rgba(0,0,0,.5);--radius-lg:14px;--radius:10px}
@@ -299,7 +299,7 @@ const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzpNMhhb9BRvR3P3NsGVy
 
 const BLOCKS = {
   Mawshynrut:["SAINDUR IA KA LAWEI CLF MULTIPURPOSE COOPERATIVE SOCIETY LTD","RYMPEI BAIAR CLUSTER LEVEL FEDERATION CLF","NONGTREI IONG BI CLUSTER LEVEL FEDERATION UMSOHPIENG","KURANGSAL CLF WOMEN MULTI PURPOSE COOPERATIVE SOCIETY","JINGKIENG BASKHEM CLF NONGJRI CIRCLE","MAWJAM CLF PORLA","NONGTREI ASOR CLF"],
-  Nongstoin:["15 SHNONG CLUSTER LEVEL FEDERATION","THWEIBIAR CLF NONGSTOIN","MAWJAMBASKHEM CLF","IAINEHSKHEM CLF","KHATWEI CLF PYNDENGREI","KHAW KYLLA CLF MAWEIT","KYRSHAN IA KA LAWEI CLF","IAIKYRSOI CLF","KYRSIEW CLF RISIANG","WANLAM JONGCHAI CLF WAHLYNGDOH"],
+  Nongstoin:["15 SHNONG CLUSTER LEVEL FEDERATION","DAKA BANTEI CLF","THWEIBIAR CLF NONGSTOIN","MAWJAMBASKHEM CLF","IAINEHSKHEM CLF","KHATWEI CLF PYNDENGREI","KHAW KYLLA CLF MAWEIT","KYNHUN SAINDUR CLF MAWIAWET","KYRSHAN IA KA LAWEI CLF","IAIKYRSOI CLF","KYRSIEW CLF RISIANG","SHAT JINSHAICLF LAITKSEH CLUSTER","WANLAM JONGCHAI CLF WAHLYNGDOH"],
   Rambrai:["SANDAKA CLF MAWDET","KHADHYNNIEW SHNONG CLUSTER LEVEL FEDERATION","WOMEN UNITED CLF RAMBRAI","IATREILANG CLF MAWTHIR","TBEHJINGSHAI CLF MAWDOH"],
   Shallang:["NIASON CLF UMDANG"],
   "Ri-Muliang":["TWAR BAN SAN CLF KYRDUM","BIRONGDIK CLF","IATYLLI BAN ROI CLF","TENGKAME CLF"]
@@ -431,11 +431,14 @@ function setDataSource(src, msg){
 
 function sheetUrl(){return SHEET_URL+'?t='+Date.now()}
 
+// CORS proxies to bypass Google Apps Script missing CORS headers
+// Using multiple fallbacks since free proxies are unreliable
 const CORS_PROXIES=[
   null,
-  'https://corsproxy.io/?',
-  'https://api.allorigins.win/get?url=',
-  'https://corsproxy.org/?'
+  'https://corsproxy.io/?url=',
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.org/?url=',
+  'https://proxy.cors.sh/'
 ];
 
 async function fetchFromSheet(){
@@ -453,9 +456,17 @@ async function fetchFromSheet(){
       clearTimeout(timer);
       if(!res.ok) throw new Error('HTTP '+res.status);
       let txt;
-      if(proxy && proxy.includes('allorigins')){
+      if(proxy && proxy.includes('api.allorigins.win')){
+        // /raw endpoint returns content directly, /get wraps in JSON
+        try {
+          const j=await res.clone().json();
+          txt=j.contents || j.body || JSON.stringify(j);
+        } catch(e) {
+          txt=await res.text();
+        }
+      } else if(proxy && proxy.includes('cors.sh')){
         const j=await res.json();
-        txt=j.contents;
+        txt=j.body || JSON.stringify(j);
       } else {
         txt=await res.text();
       }
@@ -1206,6 +1217,15 @@ function updateClfDropdown(){
 // ═══ INIT ═══
 
 async function init(){
+  // Detect file:// protocol and warn user
+  if (location.protocol === 'file:') {
+    const banner = document.getElementById('noDataBanner');
+    if (banner) {
+      banner.innerHTML = `<div class="no-data-banner" style="border-color:var(--accent-amber);background:rgba(245,158,11,.12)"><span style="font-size:22px">⚠️</span><div><strong>Running from file:// protocol</strong><br><span style="color:var(--text-muted);font-size:12px">CORS proxies are needed to fetch data from Google Sheets and may fail. For best results, serve these files via a local web server. <a href="#" onclick="event.preventDefault();this.parentElement.parentElement.style.display='none'" style="color:var(--accent-blue);text-decoration:underline">Dismiss</a></span></div></div>`;
+      banner.style.display = 'block';
+    }
+  }
+
   updateClfDropdown();
   // Set default month
   const now=new Date();
