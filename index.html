@@ -12,13 +12,18 @@
 :root{--bg-primary:#0f1117;--bg-secondary:#161822;--bg-card:#1c1f2e;--bg-card-hover:#222640;--border:#2a2d3e;--border-light:#353849;--text-primary:#e4e6f0;--text-secondary:#9498b3;--text-muted:#6b6f8a;--accent-blue:#3b82f6;--accent-green:#10b981;--accent-amber:#f59e0b;--accent-red:#ef4444;--accent-purple:#8b5cf6;--accent-teal:#14b8a6;--shadow-md:0 4px 12px rgba(0,0,0,.5);--radius-lg:14px;--radius:10px}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);color:var(--text-primary);font-size:13px;line-height:1.5;overflow-x:hidden}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg-secondary)}::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
-.dash-header{background:linear-gradient(135deg,#0c1222,#162040,#0c1222);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200}
-.dash-header-inner{max-width:1600px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
-.dash-header .logo{display:flex;align-items:center;gap:14px}
-.dash-header .logo-icon{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,#1e40af,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 15px rgba(59,130,246,.3)}
-.dash-header h1{font-size:18px;font-weight:700;color:#fff}
-.dash-header .subtitle{font-size:11px;color:var(--text-muted)}
-.header-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dash-header{background:linear-gradient(135deg,#0c1222 0%,#162040 50%,#0c1222 100%);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200}
+.dash-header::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:3px;background:linear-gradient(90deg,#3b82f6,#10b981,#f59e0b,#ef4444,#8b5cf6,#3b82f6);background-size:300% 100%;animation:gradientSlide 8s ease infinite}
+@keyframes gradientSlide{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+.dash-header-inner{max-width:1600px;margin:0 auto;padding:14px 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
+.dash-header .logo{display:flex;align-items:center;justify-content:center;gap:14px}
+.dash-header .logo-icon{width:46px;height:46px;border-radius:12px;background:linear-gradient(135deg,#1e40af,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 15px rgba(59,130,246,.3);position:relative;overflow:hidden}
+.dash-header .logo-icon::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.1) 0%,transparent 50%)}
+.dash-header .logo-text h1{font-size:17px;font-weight:700;color:#fff;line-height:1.2}
+.dash-header .logo-text .subtitle{font-size:10.5px;color:var(--text-muted);margin-top:1px;display:flex;align-items:center;gap:6px}
+.dash-header .logo-text .subtitle .gov-badge{display:inline-block;background:rgba(245,158,11,.15);color:#f59e0b;padding:0 8px;border-radius:8px;font-size:9px;font-weight:700;letter-spacing:.4px}
+
+.header-controls{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
 .header-controls select,.header-controls input{background:var(--bg-card);border:1px solid var(--border);color:var(--text-primary);padding:7px 12px;border-radius:7px;font-size:12px;min-width:140px;transition:all .2s}
 .header-controls select:focus,.header-controls input:focus{border-color:var(--accent-blue);outline:none;box-shadow:0 0 0 2px rgba(59,130,246,.15)}
 .header-controls label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600;display:block;margin-bottom:3px}
@@ -138,10 +143,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 <header class="dash-header">
   <div class="dash-header-inner">
     <div class="logo">
-      <div class="logo-icon">📊</div>
-      <div>
+      <div class="logo-icon">🏛️</div>
+      <div class="logo-text">
         <h1>CLF Monthly M&E Dashboard</h1>
-        <div class="subtitle">West Khasi Hills District — Live Data from Google Sheets</div>
+        <div class="subtitle">DMMU — West Khasi Hills, Nongstoin <span class="gov-badge">MSRLS</span></div>
       </div>
     </div>
     <div class="header-controls">
@@ -192,6 +197,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 <main class="dash-main">
 
 <div id="noDataBanner" style="display:none;margin-bottom:18px"></div>
+<div id="dupBanner" style="display:none;margin-bottom:18px"></div>
 
 <div class="section-panel active" id="tab-overview">
   <div class="kpi-grid" id="kpiGrid"></div>
@@ -419,11 +425,33 @@ function formatNum(n){
 
 function shortClf(n){return n.length>40?n.substring(0,40)+'...':n}
 
+// ═══ DUPLICATE DETECTION ═══
+
+function findDuplicates(){
+  const groups={};
+  allData.forEach(d=>{
+    const key=(d.block||'')+'||'+(d.clf||'')+'||'+(d.month||'');
+    if(!key||key==='||||') return;
+    if(!groups[key]) groups[key]=[];
+    groups[key].push(d);
+  });
+  const dupes=[];
+  Object.entries(groups).forEach(([key,rows])=>{
+    if(rows.length>1) dupes.push({block:rows[0].block,clf:rows[0].clf,month:rows[0].month,count:rows.length,rows});
+  });
+  return dupes;
+}
+
 function setDataSource(src, msg){
   dataSource=src;
   const el=document.getElementById('dataStatus');
   if(src==='none') el.innerHTML='<span class="dot dot-red"></span> No data';
-  else if(src==='sheet') el.innerHTML='<span class="dot dot-green"></span> Google Sheets live';
+  else if(src==='sheet'){
+    const dupes=findDuplicates();
+    const dupCount=dupes.length;
+    const dupTxt=dupCount>0?` &nbsp; <span style="color:var(--accent-red);font-weight:700">⚠ ${dupCount} duplicate${dupCount>1?'s':''}</span>`:'';
+    el.innerHTML='<span class="dot dot-green"></span> Google Sheets live'+dupTxt;
+  }
   else el.innerHTML='<span class="dot dot-amber"></span> '+msg;
 }
 
@@ -844,6 +872,22 @@ function renderOverview(){
       banner.style.display='block';
     } else {
       banner.style.display='none';
+    }
+  }
+
+  // Duplicate entry warning banner
+  const dupBanner=document.getElementById('dupBanner');
+  if(dupBanner){
+    const dupes=findDuplicates();
+    if(dupes.length>0){
+      let rowsHtml='';
+      dupes.forEach(d=>{
+        rowsHtml+=`<div style="padding:6px 0;border-bottom:1px solid rgba(245,158,11,.15)"><strong>${d.clf}</strong> <span style="color:var(--text-muted);font-size:11px">${d.block} | ${d.month}</span> — <strong style="color:var(--accent-amber)">${d.count} entries</strong></div>`;
+      });
+      dupBanner.innerHTML=`<div class="no-data-banner" style="border-color:var(--accent-red);background:rgba(239,68,68,.08)"><span style="font-size:22px">⚠️</span><div><strong>Duplicate entries detected (${dupes.length} CLF${dupes.length>1?'s':''})</strong><br><span style="color:var(--text-muted);font-size:12px">These CLFs have multiple submissions for the same month. Totals may be inflated due to double-counting.</span><div style="margin-top:8px;max-height:160px;overflow-y:auto">${rowsHtml}</div></div></div>`;
+      dupBanner.style.display='block';
+    } else {
+      dupBanner.style.display='none';
     }
   }
 
