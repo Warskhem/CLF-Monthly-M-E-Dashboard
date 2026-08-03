@@ -463,7 +463,7 @@ function setDataSource(src, msg){
 
 // ═══ GOOGLE SHEETS FETCH ═══
 
-function sheetUrl(){return SHEET_URL+'?'+Date.now()}
+function sheetUrl(){return SHEET_URL+'&t='+Date.now()}
 
 // CORS proxies (kept as fallback in case Google changes header behavior)
 const CORS_PROXIES=[
