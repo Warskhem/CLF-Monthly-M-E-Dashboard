@@ -301,7 +301,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 </div>
 
 <script>
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbzpNMhhb9BRvR3P3NsGVyfRsQkyvQRgHadj35gB00ST_-6ZpuJZ23GL7s-m85DTdM84/exec';
+// Data source: public Google Sheet exported as CSV (no Apps Script required).
+// The sheet is public and Google returns Access-Control-Allow-Origin:* so direct fetch works.
+const SHEET_ID = '1bKDTc-7bi2sbAR5vgtdY9vhMX84UuV96778B5KpSfh8';
+const SHEET_GID = '1299678974';
+const SHEET_URL = 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/export?format=csv&gid='+SHEET_GID;
+// Column aliases where the sheet header differs from dashboard indicator names
+const COL_ALIASES = {'Receipt':'Receipt A/c','Payment':'Payment A/c'};
 
 const BLOCKS = {
   Mawshynrut:["SAINDUR IA KA LAWEI CLF MULTIPURPOSE COOPERATIVE SOCIETY LTD","RYMPEI BAIAR CLUSTER LEVEL FEDERATION CLF","NONGTREI IONG BI CLUSTER LEVEL FEDERATION UMSOHPIENG","KURANGSAL CLF WOMEN MULTI PURPOSE COOPERATIVE SOCIETY","JINGKIENG BASKHEM CLF NONGJRI CIRCLE","MAWJAM CLF PORLA","NONGTREI ASOR CLF"],
@@ -457,10 +463,9 @@ function setDataSource(src, msg){
 
 // ═══ GOOGLE SHEETS FETCH ═══
 
-function sheetUrl(){return SHEET_URL+'?t='+Date.now()}
+function sheetUrl(){return SHEET_URL+'?'+Date.now()}
 
-// CORS proxies to bypass Google Apps Script missing CORS headers
-// Using multiple fallbacks since free proxies are unreliable
+// CORS proxies (kept as fallback in case Google changes header behavior)
 const CORS_PROXIES=[
   null,
   'https://corsproxy.io/?url=',
@@ -469,6 +474,48 @@ const CORS_PROXIES=[
   'https://proxy.cors.sh/'
 ];
 
+// Simple CSV parser that handles quoted fields (commas/newlines inside cells)
+function parseCSV(text){
+  const rows=[];let row=[],cur='',inQ=false;
+  for(let i=0;i<text.length;i++){
+    const ch=text[i];
+    if(inQ){
+      if(ch==='"'){if(text[i+1]==='"'){cur+='"';i++}else inQ=false}
+      else cur+=ch;
+    } else {
+      if(ch==='"')inQ=true;
+      else if(ch===','){row.push(cur);cur=''}
+      else if(ch==='\n'){row.push(cur);rows.push(row);row=[];cur=''}
+      else if(ch==='\r'){}
+      else cur+=ch;
+    }
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return rows;
+}
+
+// Convert CSV rows → the {submissions:[...]} object the dashboard understands
+function rowsToSubmissions(rows){
+  if(!rows||rows.length<2) return null;
+  const header=rows[0].map(h=>h.trim());
+  const submissions=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r];
+    if(row.length===1&&row[0]==='')continue;
+    const sub={};
+    for(let i=0;i<header.length;i++){
+      const name=header[i];
+      if(!name)continue;
+      const key=COL_ALIASES[name]||name;
+      const val=(row[i]||'').trim();
+      if(val!=='') sub[key]=val;
+    }
+    if(!sub.Block&&!sub.block)continue; // skip rows without a CLF/block
+    submissions.push(sub);
+  }
+  return {submissions};
+}
+
 async function fetchFromSheet(){
   document.getElementById('loadingOverlay').classList.remove('hidden');
   setDataSource('none','Connecting...');
@@ -476,7 +523,7 @@ async function fetchFromSheet(){
   for(let pi=0;pi<CORS_PROXIES.length;pi++){
     const proxy=CORS_PROXIES[pi];
     const ac=new AbortController();
-    const timer=setTimeout(()=>ac.abort(),15000);
+    const timer=setTimeout(()=>ac.abort(),20000);
     try{
       let url=sheetUrl();
       if(proxy) url=proxy+encodeURIComponent(url);
@@ -485,7 +532,6 @@ async function fetchFromSheet(){
       if(!res.ok) throw new Error('HTTP '+res.status);
       let txt;
       if(proxy && proxy.includes('api.allorigins.win')){
-        // /raw endpoint returns content directly, /get wraps in JSON
         try {
           const j=await res.clone().json();
           txt=j.contents || j.body || JSON.stringify(j);
@@ -498,15 +544,12 @@ async function fetchFromSheet(){
       } else {
         txt=await res.text();
       }
-      let data;
-      try{data=JSON.parse(txt)}catch(e){continue}
-      if(data && data.error) continue;
-      const converted=convertSummaryData(data);
+      const converted=convertSummaryData(rowsToSubmissions(parseCSV(txt)));
       if(converted && converted.length){
         allData=converted;
         setDataSource('sheet','Loaded');
         document.getElementById('loadingOverlay').classList.add('hidden');
-        window._chartExtras=data;
+        window._chartExtras={};
         return true;
       }
       connectedEmpty=true;
