@@ -128,6 +128,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 .loading-overlay{position:fixed;inset:0;background:rgba(15,17,23,.85);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px}
 .loading-overlay.hidden{display:none}
 .loading-overlay p{color:var(--text-muted);font-size:14px}
+.notice-banner{background:linear-gradient(135deg,#fef3c7 0%,#fde68a 100%);border:1px solid #f59e0b;border-radius:var(--radius-md);padding:14px 20px;margin:0 28px 12px;display:flex;align-items:flex-start;gap:12px;font-size:12px;line-height:1.6;color:#78350f}
+.notice-banner .notice-icon{font-size:22px;flex-shrink:0;margin-top:1px}
+.notice-banner .notice-content{flex:1}
+.notice-banner .notice-title{font-weight:700;font-size:13px;margin-bottom:4px;color:#92400e}
+.notice-banner ul{margin:4px 0 0 16px;padding:0}
+.notice-banner ul li{margin-bottom:2px}
+.notice-banner strong{color:#92400e}
+.notice-banner .notice-cumul{margin-top:6px;padding-top:6px;border-top:1px solid rgba(245,158,11,.3);font-weight:600;color:#1e40af;background:rgba(59,130,246,.08);padding:6px 10px;border-radius:6px}
+@media(max-width:768px){.notice-banner{margin:0 14px 10px;padding:10px 14px;font-size:11px}.notice-banner .notice-title{font-size:12px}}
 @media(max-width:768px){.dash-header-inner{flex-direction:column;align-items:flex-start}.header-controls{width:100%}.kpi-grid{grid-template-columns:repeat(2,1fr)}.dash-main{padding:12px 14px 40px}.nav-tab{padding:10px 14px;font-size:11px}}
 @media(max-width:480px){.kpi-grid{grid-template-columns:1fr}}
 @media print{body{background:#fff!important;color:#000!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.dash-header{position:static!important;background:#1a365d!important;-webkit-print-color-adjust:exact}.dash-header h1{color:#fff!important}.dash-header .subtitle{color:#ccc!important}.header-controls,.nav-tabs,.btn,.btn-success,.data-status,.loading-overlay,.modal-overlay{display:none!important}.section-panel{display:block!important}.section-panel.active{display:block!important}.card{break-inside:avoid;border:1px solid #ddd!important;background:#fff!important}.card-header{background:#f5f7fa!important;border-bottom:1px solid #ddd!important}.card-header h3{color:#1a365d!important}.kpi-card{border:1px solid #ddd!important;background:#fafbfc!important;break-inside:avoid}.kpi-card .kpi-value{color:#1a365d!important}.kpi-card .kpi-label{color:#666!important}.data-table th{background:#e8edf3!important;color:#333!important}.data-table td{color:#333!important;border-bottom:1px solid #eee!important}.clf-card{border:1px solid #ddd!important;background:#fafbfc!important;break-inside:avoid}.clf-card .clf-name{color:#000!important}.block-btn{display:none!important}.chart-container{height:200px!important}.chart-container.tall{height:250px!important}canvas{max-width:100%!important}.badge-green{background:#e6f7ee!important;color:#065f46!important}.badge-red{background:#fde8e8!important;color:#7f1d1d!important}.badge-amber{background:#fef3c7!important;color:#78350f!important}.quality-item{border-bottom:1px solid #eee!important}.indicator-item{border:1px solid #eee!important;background:#fafbfc!important}.indicator-item .ind-label{color:#666!important}.indicator-item .ind-value{color:#000!important}.empty-state p{color:#666!important}}
@@ -177,6 +186,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
     </div>
   </div>
 </header>
+
+<div class="notice-banner" id="dataEntryNotice">
+  <div class="notice-icon">📋</div>
+  <div class="notice-content">
+    <div class="notice-title">IMPORTANT NOTE – MONTHLY DATA ENTRY</div>
+    <div>Please enter data <strong>only for the specific reporting month</strong>. Do <strong>NOT</strong> enter or carry forward data from previous months.</div>
+    <ul>
+      <li><strong>April:</strong> Enter only the data for April.</li>
+      <li><strong>May:</strong> Enter only the data for May. Do not re-enter April data.</li>
+      <li><strong>June:</strong> Enter only the data for June. Do not re-enter April or May data.</li>
+      <li>Continue the same process for every subsequent month.</li>
+    </ul>
+    <div class="notice-cumul">📊 Cumulative Count: The Cumulative Count will be calculated automatically by the Dashboard, starting from April and adding the monthly data sequentially.</div>
+  </div>
+</div>
 
 <nav class="nav-tabs">
   <div class="nav-tabs-inner">
@@ -418,6 +442,81 @@ function getPrevMonth(m){
   const[y,mo]=m.split('-').map(Number);
   const d=new Date(y,mo-2,1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+// ═══ CUMULATIVE CALCULATION (April → selected month) ═══
+
+function getMonthsInRange(startMonth, endMonth){
+  const months=[];
+  let [sy,sm]=startMonth.split('-').map(Number);
+  const [ey,em]=endMonth.split('-').map(Number);
+  while(sy<ey||(sy===ey&&sm<=em)){
+    months.push(sy+'-'+String(sm).padStart(2,'0'));
+    sm++;if(sm>12){sm=1;sy++}
+  }
+  return months;
+}
+
+function getAprilMonth(selectedMonth){
+  const y=selectedMonth.split('-')[0];
+  return y+'-04';
+}
+
+// Returns cumulative data structure: { block → clf → indicator → { monthly, cumulative } }
+function getCumulativeData(selectedMonth){
+  const april=getAprilMonth(selectedMonth);
+  const months=getMonthsInRange(april,selectedMonth);
+  const blocks=getVisibleBlocks();
+  const result={};
+
+  blocks.forEach(b=>{
+    result[b]={};
+    (BLOCKS[b]||[]).forEach(clf=>{
+      result[b][clf]={};
+      // Collect all indicators from all non-cumulative sections
+      const allInds=[];
+      SECTIONS.filter(s=>s.id!=='cumulative').forEach(s=>s.indicators.forEach(i=>{if(!allInds.includes(i))allInds.push(i)}));
+
+      allInds.forEach(ind=>{
+        let cumul=0;
+        let monthly=0;
+        months.forEach(m=>{
+          const mData=allData.filter(x=>x.block===b&&x.clf===clf&&x.month===m);
+          const d=mData[0];
+          const val=d?Number(d.indicators[ind]||0):0;
+          if(!isNaN(val)){
+            cumul+=val;
+            if(m===selectedMonth) monthly=val;
+          }
+        });
+        result[b][clf][ind]={monthly,cumulative:cumul};
+      });
+    });
+  });
+  return result;
+}
+
+// Get block-level cumulative sums (sum all CLFs in block)
+function getBlockCumulative(cumData, block, indicator){
+  let monthly=0, cumulative=0;
+  if(!cumData[block]) return {monthly:0,cumulative:0};
+  Object.values(cumData[block]).forEach(clfData=>{
+    const v=clfData[indicator]||{monthly:0,cumulative:0};
+    monthly+=v.monthly;
+    cumulative+=v.cumulative;
+  });
+  return {monthly,cumulative};
+}
+
+// Get overall cumulative sums (all blocks)
+function getOverallCumulative(cumData, indicator){
+  let monthly=0, cumulative=0;
+  Object.keys(cumData).forEach(b=>{
+    const v=getBlockCumulative(cumData,b,indicator);
+    monthly+=v.monthly;
+    cumulative+=v.cumulative;
+  });
+  return {monthly,cumulative};
 }
 
 function formatNum(n){
@@ -1043,23 +1142,46 @@ function renderSectorTabs(){
     const isActive=currentTab===sec.id;
 
     let html='<div class="kpi-grid">';
-    sec.indicators.slice(0,4).forEach(ind=>{
-      let displayVal, subLabel='';
-      if(isTextIndicator(ind)){
-        let totalCount=0, received=0;
-        d.forEach(x=>{const v=x.indicators[ind]||'';if(v&&String(v).trim()!==''){received++;totalCount+=getTextCount(v)}});
-        displayVal=received+'/'+d.length;
-        subLabel= totalCount>0 ? totalCount+' trainings' : 'none';
-      } else {
-        let sum=0;d.forEach(x=>{const v=Number(x.indicators[ind]||0);if(!isNaN(v))sum+=v});
-        displayVal=formatNum(sum);
-      }
-      html+=`<div class="kpi-card" style="background:${sec.color}08"><div class="kpi-icon" style="background:${sec.color}22;color:${sec.color}">${isTextIndicator(ind)?'📋':'📊'}</div><div class="kpi-value" style="color:${sec.color}">${displayVal}</div><div class="kpi-label">${ind}</div>${subLabel?`<div class="kpi-trend neutral" style="font-size:10px">${subLabel}</div>`:''}</div>`;
-    });
+    if(sec.id==='cumulative'){
+      // Special KPIs for cumulative: Monthly Total, Cumulative Total, Growth
+      const cumData=getCumulativeData(m);
+      let monthTotal=0, cumulTotal=0;
+      const firstInd=SECTIONS.filter(s=>s.id!=='cumulative')[0]?.indicators[0]||'No. of Loan Sanctioned';
+      SECTIONS.filter(s=>s.id!=='cumulative').forEach(s=>s.indicators.forEach(ind=>{
+        if(isTextIndicator(ind)) return;
+        const ov=getOverallCumulative(cumData,ind);
+        monthTotal+=ov.monthly;
+        cumulTotal+=ov.cumulative;
+      }));
+      const growth=monthTotal>0?Math.round(((cumulTotal-monthTotal)/monthTotal)*100):0;
+      const april=getAprilMonth(m);
+      const monthLabel=m.split('-')[1]+'/'+m.split('-')[0].slice(2);
+      const aprilLabel=april.split('-')[1]+'/'+april.split('-')[0].slice(2);
+
+      html+=`<div class="kpi-card" style="background:#3b82f608"><div class="kpi-icon" style="background:#3b82f622;color:#3b82f6">📅</div><div class="kpi-value" style="color:#3b82f6">${formatNum(Math.round(monthTotal))}</div><div class="kpi-label">Monthly Total (${monthLabel})</div><div class="kpi-trend neutral" style="font-size:10px">Current month only</div></div>`;
+      html+=`<div class="kpi-card" style="background:#10b98108"><div class="kpi-icon" style="background:#10b98122;color:#10b981">📊</div><div class="kpi-value" style="color:#10b981">${formatNum(Math.round(cumulTotal))}</div><div class="kpi-label">Cumulative (${aprilLabel} → ${monthLabel})</div><div class="kpi-trend up" style="font-size:10px">Apr through ${monthLabel}</div></div>`;
+      html+=`<div class="kpi-card" style="background:#f59e0b08"><div class="kpi-icon" style="background:#f59e0b22;color:#f59e0b">📈</div><div class="kpi-value" style="color:${growth>=0?'#10b981':'#ef4444'}">${growth>=0?'+':''}${growth}%</div><div class="kpi-label">Growth (Cumul vs Monthly)</div><div class="kpi-trend ${growth>=0?'up':'down'}" style="font-size:10px">${growth>=0?'▲':'▼'} accumulation</div></div>`;
+      const months=getMonthsInRange(april,m);
+      html+=`<div class="kpi-card" style="background:#8b5cf608"><div class="kpi-icon" style="background:#8b5cf622;color:#8b5cf6">🗓️</div><div class="kpi-value" style="color:#8b5cf6">${months.length}</div><div class="kpi-label">Months Tracked</div><div class="kpi-trend neutral" style="font-size:10px">${aprilLabel} to ${monthLabel}</div></div>`;
+    } else {
+      sec.indicators.slice(0,4).forEach(ind=>{
+        let displayVal, subLabel='';
+        if(isTextIndicator(ind)){
+          let totalCount=0, received=0;
+          d.forEach(x=>{const v=x.indicators[ind]||'';if(v&&String(v).trim()!==''){received++;totalCount+=getTextCount(v)}});
+          displayVal=received+'/'+d.length;
+          subLabel= totalCount>0 ? totalCount+' trainings' : 'none';
+        } else {
+          let sum=0;d.forEach(x=>{const v=Number(x.indicators[ind]||0);if(!isNaN(v))sum+=v});
+          displayVal=formatNum(sum);
+        }
+        html+=`<div class="kpi-card" style="background:${sec.color}08"><div class="kpi-icon" style="background:${sec.color}22;color:${sec.color}">${isTextIndicator(ind)?'📋':'📊'}</div><div class="kpi-value" style="color:${sec.color}">${displayVal}</div><div class="kpi-label">${ind}</div>${subLabel?`<div class="kpi-trend neutral" style="font-size:10px">${subLabel}</div>`:''}</div>`;
+      });
+    }
     html+='</div><div class="panel-row cols-2">';
     if(sec.id==='cumulative'){
-      html+=`<div class="card"><div class="card-header"><h3>📊 Indicators Grouped by Section</h3></div><div class="card-body no-pad" id="table${sec.id}Indicators"></div></div>`;
-      html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise ${sec.name}</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
+      html+=`<div class="card"><div class="card-header"><h3>📊 Monthly vs Cumulative — All Indicators</h3><span class="card-badge badge-blue" style="font-size:9px">Apr → ${m}</span></div><div class="card-body no-pad" id="table${sec.id}Indicators"></div></div>`;
+      html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise Cumulative</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
     } else {
       html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise ${sec.name}</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
       html+=`<div class="card"><div class="card-header"><h3>${sec.icon} All Indicators</h3></div><div class="card-body no-pad"><div class="table-scroll" id="table${sec.id}Indicators"></div></div></div>`;
@@ -1083,9 +1205,22 @@ function renderSectorBlockChart(sec,data,blocks){
   const cid='chart'+sec.id+'BlockInd';
   const c=document.getElementById(cid);
   if(!c) return;
-  const topI=sec.indicators.filter(i=>!isTextIndicator(i)&&!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,10);
-  newChart(cid,'bar',{labels:topI.map(i=>i.length>28?i.substring(0,28)+'...':i),
-    datasets:blocks.map(b=>({label:b,data:topI.map(ind=>{let s=0;data.filter(d=>d.block===b).forEach(d=>{const v=Number(d.indicators[ind]||0);if(!isNaN(v))s+=v});return s}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'99',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3}))},chartOpts('vertical'));
+  if(sec.id==='cumulative'){
+    // Cumulative tab: show grouped bars with Monthly vs Cumulative per block
+    const m=getCurrentMonth();
+    const cumData=getCumulativeData(m);
+    const topInds=SECTIONS.filter(s=>s.id!=='cumulative').slice(0,3).flatMap(s=>s.indicators.filter(i=>!isTextIndicator(i)&&!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,3));
+    const datasets=[];
+    blocks.forEach(b=>{
+      datasets.push({label:b+' (Monthly)',data:topInds.map(ind=>{const v=getBlockCumulative(cumData,b,ind);return v.monthly}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'66',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3});
+      datasets.push({label:b+' (Cumul.)',data:topInds.map(ind=>{const v=getBlockCumulative(cumData,b,ind);return v.cumulative}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'cc',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3});
+    });
+    newChart(cid,'bar',{labels:topInds.map(i=>i.length>24?i.substring(0,24)+'...':i),datasets},chartOpts('vertical'));
+  } else {
+    const topI=sec.indicators.filter(i=>!isTextIndicator(i)&&!i.includes('Type of Model')&&!i.includes('VRF Utilization')).slice(0,10);
+    newChart(cid,'bar',{labels:topI.map(i=>i.length>28?i.substring(0,28)+'...':i),
+      datasets:blocks.map(b=>({label:b,data:topI.map(ind=>{let s=0;data.filter(d=>d.block===b).forEach(d=>{const v=Number(d.indicators[ind]||0);if(!isNaN(v))s+=v});return s}),backgroundColor:(BLOCK_COLORS[b]||'#666')+'99',borderColor:BLOCK_COLORS[b]||'#666',borderRadius:3}))},chartOpts('vertical'));
+  }
 }
 
 function renderSectorIndicatorTable(sec,data,blocks){
@@ -1123,35 +1258,62 @@ function renderSectorIndicatorTable(sec,data,blocks){
 function renderCumulativeIndicatorTables(sec,data,blocks){
   const e=document.getElementById('table'+sec.id+'Indicators');
   if(!e) return;
+  const m=getCurrentMonth();
+  const cumData=getCumulativeData(m);
   let h='<div class="table-scroll">';
   SECTIONS.filter(s=>s.id!=='cumulative').forEach(origSec=>{
-    const cumInds=sec.indicators.filter(ind=>origSec.indicators.includes(ind.replace('Cumulative - ','')));
-    if(cumInds.length===0) return;
+    const inds=origSec.indicators;
+    if(inds.length===0) return;
     const ic=origSec.color||'#666';
     h+=`<div style="position:sticky;top:0;z-index:2;padding:8px 14px;font-size:12px;font-weight:700;color:${ic};background:var(--bg-secondary);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px">${origSec.icon} ${origSec.name}</div>`;
-    h+='<table class="data-table"><thead><tr><th>Indicator</th>';blocks.forEach(b=>h+=`<th>${b}</th>`);h+='<th>Total</th><th>Avg</th></tr></thead><tbody>';
-    cumInds.forEach(ind=>{
+    h+='<table class="data-table"><thead><tr><th style="min-width:180px">Indicator</th>';
+    blocks.forEach(b=>h+=`<th colspan="2" style="text-align:center;border-left:2px solid var(--border)">${b}</th>`);
+    h+='<th colspan="2" style="text-align:center;border-left:2px solid var(--border)">Total</th></tr>';
+    h+='<tr><th></th>';
+    blocks.forEach(()=>h+=`<th style="text-align:right;font-size:9px;border-left:2px solid var(--border)">Monthly</th><th style="text-align:right;font-size:9px">Cumul.</th>`);
+    h+='<th style="text-align:right;font-size:9px;border-left:2px solid var(--border)">Monthly</th><th style="text-align:right;font-size:9px">Cumul.</th></tr></thead><tbody>';
+    inds.forEach(ind=>{
       const isText=isTextIndicator(ind);
-      h+=`<tr><td style="max-width:240px">${ind.replace('Cumulative - ','')}</td>`;
-      let ts=0,tCount=0;
+      h+=`<tr><td style="max-width:240px;font-weight:500">${ind}</td>`;
+      let totalM=0, totalC=0;
       blocks.forEach(b=>{
-        const bdata=data.filter(d=>d.block===b);
         if(isText){
-          let totalCount=0,received=0;
-          bdata.forEach(d=>{const v=d.indicators[ind]||'';if(v&&String(v).trim()!==''){received++;totalCount+=getTextCount(v)}});
-          ts+=totalCount;tCount+=received;
-          h+=`<td style="text-align:right">${bdata.length>0?received+'/'+bdata.length:'—'}</td>`;
+          let mCount=0, cCount=0;
+          (BLOCKS[b]||[]).forEach(clf=>{
+            const v=cumData[b]&&cumData[b][clf]&&cumData[b][clf][ind];
+            if(v){
+              const mData=allData.filter(x=>x.block===b&&x.clf===clf&&x.month===m);
+              mData.forEach(d=>{const val=d.indicators[ind]||'';if(val&&String(val).trim()!=='')mCount+=getTextCount(val)});
+              // For cumulative text, count across all months
+              const months=getMonthsInRange(getAprilMonth(m),m);
+              months.forEach(mm=>{
+                allData.filter(x=>x.block===b&&x.clf===clf&&x.month===mm).forEach(d=>{
+                  const val=d.indicators[ind]||'';
+                  if(val&&String(val).trim()!==''){
+                    if(mm===m){}else cCount+=getTextCount(val)}
+                });
+              });
+              cCount+=mCount; // add current month to cumulative
+            }
+          });
+          totalM+=mCount; totalC+=cCount;
+          h+=`<td style="text-align:right;border-left:2px solid var(--border)">${mCount>0?mCount+' trn':'—'}</td><td style="text-align:right;font-weight:600;color:var(--accent-blue)">${cCount>0?cCount+' trn':'—'}</td>`;
         } else {
-          let s=0;
-          bdata.forEach(d=>{const v=Number(d.indicators[ind]||0);if(!isNaN(v))s+=v});
-          ts+=s;tCount+=1;
-          h+=`<td style="text-align:right">${formatNum(Math.round(s))}</td>`;
+          let bM=0, bC=0;
+          (BLOCKS[b]||[]).forEach(clf=>{
+            const v=cumData[b]&&cumData[b][clf]&&cumData[b][clf][ind];
+            if(v){bM+=v.monthly;bC+=v.cumulative}
+          });
+          totalM+=bM; totalC+=bC;
+          h+=`<td style="text-align:right;border-left:2px solid var(--border)">${formatNum(Math.round(bM))}</td><td style="text-align:right;font-weight:600;color:var(--accent-blue)">${formatNum(Math.round(bC))}</td>`;
         }
       });
       if(isText){
-        h+=`<td style="text-align:right;font-weight:700">${ts} <span style="font-weight:400;color:var(--text-muted);font-size:10px">trainings</span></td><td style="text-align:right;color:var(--accent-blue)">${tCount} CLFs</td></tr>`;
+        h+=`<td style="text-align:right;border-left:2px solid var(--border);font-weight:700">${totalM} <span style="font-weight:400;color:var(--text-muted);font-size:10px">trn</span></td><td style="text-align:right;font-weight:700;color:var(--accent-blue)">${totalC} <span style="font-weight:400;color:var(--text-muted);font-size:10px">trn</span></td></tr>`;
       } else {
-        h+=`<td style="text-align:right;font-weight:700">${formatNum(Math.round(ts))}</td><td style="text-align:right;color:var(--accent-blue)">${formatNum(blocks.length>0?Math.round(ts/blocks.length):0)}</td></tr>`;
+        const growth=totalM>0?Math.round(((totalC-totalM)/totalM)*100):0;
+        const gColor=growth>0?'var(--accent-green)':growth<0?'var(--accent-red)':'var(--text-muted)';
+        h+=`<td style="text-align:right;border-left:2px solid var(--border);font-weight:700">${formatNum(Math.round(totalM))}</td><td style="text-align:right;font-weight:700;color:var(--accent-blue)">${formatNum(Math.round(totalC))}</td></tr>`;
       }
     });
     h+='</tbody></table>';
@@ -1175,12 +1337,25 @@ function renderClfDrillDown(sec,data,blocks){
     let clfs=BLOCKS[b]||[];
     if(sp===b&&sc) clfs=clfs.filter(c=>c===sc);
     let h='';
+    const m=getCurrentMonth();
+    const isCumul=sec.id==='cumulative';
+    const cumData=isCumul?getCumulativeData(m):null;
     clfs.forEach(clf=>{
       const d=data.find(x=>x.block===b&&x.clf===clf);let f=0,t=0;
       if(d){sec.indicators.forEach(i=>{t++;if(d.indicators[i]!=='')f++})}
-      const r=t>0?Math.round((f/t)*100):0;
-      const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
-      h+=`<div class="clf-card" onclick="openClfModal('${b}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+      if(isCumul && cumData && cumData[b] && cumData[b][clf]){
+        // Show cumulative totals instead of coverage
+        let cumSum=0;
+        Object.values(cumData[b][clf]).forEach(v=>{cumSum+=v.cumulative});
+        const monthSum=Object.values(cumData[b][clf]).reduce((a,v)=>a+v.monthly,0);
+        const growth=monthSum>0?Math.round(((cumSum-monthSum)/monthSum)*100):0;
+        const cl=growth>50?'var(--accent-green)':growth>0?'var(--accent-amber)':'var(--accent-red)';
+        h+=`<div class="clf-card" onclick="openClfModal('${b}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Cumul: <strong style="color:var(--accent-blue)">${formatNum(Math.round(cumSum))}</strong></span><span class="clf-stat">Monthly: <strong>${formatNum(Math.round(monthSum))}</strong></span><span class="clf-stat">Growth: <strong style="color:${cl}">${growth>=0?'+':''}${growth}%</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${Math.min(100,Math.abs(growth))}%;background:var(--accent-blue)"></div></div></div>`;
+      } else {
+        const r=t>0?Math.round((f/t)*100):0;
+        const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
+        h+=`<div class="clf-card" onclick="openClfModal('${b}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+      }
     });
     ge.innerHTML=h;
   };
@@ -1199,13 +1374,24 @@ window.seClick=function(sid,block){
   if(!se||!ge)return;
   se.querySelectorAll('.block-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.block===block));
   const clfs=BLOCKS[block]||[];
+  const isCumul=sec.id==='cumulative';
+  const cumData=isCumul?getCumulativeData(m):null;
   let h='';
   clfs.forEach(clf=>{
-    const d2=d.find(x=>x.block===block&&x.clf===clf);let f=0,t=0;
-    if(d2){sec.indicators.forEach(i=>{t++;if(d2.indicators[i]!=='')f++})}
-    const r=t>0?Math.round((f/t)*100):0;
-    const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
-    h+=`<div class="clf-card" onclick="openClfModal('${block}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+    if(isCumul && cumData && cumData[block] && cumData[block][clf]){
+      let cumSum=0;
+      Object.values(cumData[block][clf]).forEach(v=>{cumSum+=v.cumulative});
+      const monthSum=Object.values(cumData[block][clf]).reduce((a,v)=>a+v.monthly,0);
+      const growth=monthSum>0?Math.round(((cumSum-monthSum)/monthSum)*100):0;
+      const cl=growth>50?'var(--accent-green)':growth>0?'var(--accent-amber)':'var(--accent-red)';
+      h+=`<div class="clf-card" onclick="openClfModal('${block}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Cumul: <strong style="color:var(--accent-blue)">${formatNum(Math.round(cumSum))}</strong></span><span class="clf-stat">Monthly: <strong>${formatNum(Math.round(monthSum))}</strong></span><span class="clf-stat">Growth: <strong style="color:${cl}">${growth>=0?'+':''}${growth}%</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${Math.min(100,Math.abs(growth))}%;background:var(--accent-blue)"></div></div></div>`;
+    } else {
+      const d2=d.find(x=>x.block===block&&x.clf===clf);let f=0,t=0;
+      if(d2){sec.indicators.forEach(i=>{t++;if(d2.indicators[i]!=='')f++})}
+      const r=t>0?Math.round((f/t)*100):0;
+      const cl=r>80?'var(--accent-green)':r>50?'var(--accent-amber)':'var(--accent-red)';
+      h+=`<div class="clf-card" onclick="openClfModal('${block}','${clf.replace(/'/g,"\\'")}','${sec.id}')"><div class="clf-name">${clf}</div><div class="clf-meta"><span class="clf-stat">Coverage: <strong style="color:${cl}">${r}%</strong></span><span class="clf-stat">Filled: <strong>${f}/${t}</strong></span></div><div class="progress progress-sm" style="margin-top:8px"><div class="progress-fill" style="width:${r}%;background:${cl}"></div></div></div>`;
+    }
   });
   ge.innerHTML=h;
 };
@@ -1215,17 +1401,43 @@ function openClfModal(block,clf,secId){
   const d=allData.find(x=>x.block===block&&x.clf===clf&&x.month===m);
   const sec=SECTIONS.find(s=>s.id===secId);
   document.getElementById('modalTitle').textContent=clf;
-  let html=`<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px"><strong>Block:</strong> ${block} &nbsp;|&nbsp; <strong>Month:</strong> ${m} &nbsp;|&nbsp; <strong>Sector:</strong> ${sec.name}</div><div class="indicator-grid">`;
+  const isCumul=secId==='cumulative';
+  const cumData=isCumul?getCumulativeData(m):null;
+  const april=isCumul?getAprilMonth(m):null;
+  const months=isCumul?getMonthsInRange(april,m):[];
+  let info=`<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:8px;padding:12px 16px;margin-bottom:16px"><strong>Block:</strong> ${block} &nbsp;|&nbsp; <strong>Month:</strong> ${m} &nbsp;|&nbsp; <strong>Sector:</strong> ${sec.name}${isCumul?` &nbsp;|&nbsp; <strong>Period:</strong> ${april} → ${m} (${months.length} months)`:''}</div>`;
+  let html=info+'<div class="indicator-grid">';
   sec.indicators.forEach(ind=>{
-    const v=d?d.indicators[ind]:'';
-    const has=v!==''&&v!==undefined;
     if(isTextIndicator(ind)){
-      const items=getTextList(v);
-      html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${has?'var(--text-primary)':'var(--accent-red)'};font-size:13px">${has?items.length+' trainings':'<span style="color:var(--accent-red)">Missing</span>'}</div>${has?`<div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.3">${items.map(t=>t.length>40?t.substring(0,40)+'…':t).join(', ')}</div>`:''}</div>`;
+      // For text indicators, aggregate across months for cumulative
+      let totalCount=0;
+      if(isCumul){
+        months.forEach(mm=>{
+          const md=allData.find(x=>x.block===block&&x.clf===clf&&x.month===mm);
+          const val=md?md.indicators[ind]:'';
+          if(val&&String(val).trim()!=='') totalCount+=getTextCount(val);
+        });
+      }
+      const v=d?d.indicators[ind]:'';
+      const has=v!==''&&v!==undefined;
+      const display=isCumul?totalCount:(has?getTextList(v).length:0);
+      html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${display>0?'var(--text-primary)':'var(--accent-red)'};font-size:13px">${display>0?display+' trainings':'<span style="color:var(--accent-red)">Missing</span>'}</div>${isCumul?`<div style="font-size:10px;color:var(--accent-blue);margin-top:2px">${april} → ${m}</div>`:''}</div>`;
     } else {
+      let cumVal=0, monthVal=0;
+      if(isCumul && cumData && cumData[block] && cumData[block][clf] && cumData[block][clf][ind]){
+        const cv=cumData[block][clf][ind];
+        monthVal=cv.monthly;
+        cumVal=cv.cumulative;
+      }
+      const v=d?d.indicators[ind]:'';
+      const has=v!==''&&v!==undefined;
       const n=has?Number(v):0;
       const valid=has&&!isNaN(n);
-      html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${valid?'var(--text-primary)':'var(--accent-red)'}">${valid?formatNum(n):'<span style="color:var(--accent-red)">Missing</span>'}</div>${valid?`<div class="ind-bar"><div class="ind-bar-fill" style="width:${Math.min(100,n)}%;background:${sec.color}"></div></div>`:''}</div>`;
+      if(isCumul){
+        html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div style="display:flex;gap:12px;align-items:baseline"><div class="ind-value" style="color:var(--text-primary)">${formatNum(Math.round(monthVal))} <span style="font-size:9px;color:var(--text-muted)">monthly</span></div><div class="ind-value" style="color:var(--accent-blue);font-weight:700">${formatNum(Math.round(cumVal))} <span style="font-size:9px;color:var(--text-muted)">cumul.</span></div></div></div>`;
+      } else {
+        html+=`<div class="indicator-item"><div class="ind-label">${ind}</div><div class="ind-value" style="color:${valid?'var(--text-primary)':'var(--accent-red)'}">${valid?formatNum(n):'<span style="color:var(--accent-red)">Missing</span>'}</div>${valid?`<div class="ind-bar"><div class="ind-bar-fill" style="width:${Math.min(100,n)}%;background:${sec.color}"></div></div>`:''}</div>`;
+      }
     }
   });
   html+='</div>';
