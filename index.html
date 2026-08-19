@@ -211,6 +211,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
   </div>
 </div>
 
+<div class="notice-banner" id="dupBanner" style="display:none;border-color:#ef4444;background:linear-gradient(135deg,#fef2f2 0%,#fecaca 100%);color:#7f1d1d"></div>
+
 <nav class="nav-tabs">
   <div class="nav-tabs-inner">
     <div class="nav-tab active" data-tab="overview" onclick="switchTab('overview',this)">📊 Overview</div>
@@ -230,7 +232,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
 <main class="dash-main">
 
 <div id="noDataBanner" style="display:none;margin-bottom:18px"></div>
-<div id="dupBanner" style="display:none;margin-bottom:18px"></div>
 
 <div class="section-panel active" id="tab-overview">
   <div class="kpi-grid" id="kpiGrid"></div>
@@ -1033,10 +1034,10 @@ function renderOverview(){
     if(dupes.length>0){
       let rowsHtml='';
       dupes.forEach(d=>{
-        rowsHtml+=`<div style="padding:6px 0;border-bottom:1px solid rgba(245,158,11,.15)"><strong>${d.clf}</strong> <span style="color:var(--text-muted);font-size:11px">${d.block} | ${d.month}</span> — <strong style="color:var(--accent-amber)">${d.count} entries</strong></div>`;
+        rowsHtml+=`<div style="padding:4px 0;border-bottom:1px solid rgba(239,68,68,.15);font-size:11px"><strong>${d.clf}</strong> <span style="color:#991b1b;opacity:.7">${d.block} | ${d.month}</span> — <strong style="color:#dc2626">${d.count} entries</strong></div>`;
       });
-      dupBanner.innerHTML=`<div class="no-data-banner" style="border-color:var(--accent-red);background:rgba(239,68,68,.08)"><span style="font-size:22px">⚠️</span><div><strong>Duplicate entries detected (${dupes.length} CLF${dupes.length>1?'s':''})</strong><br><span style="color:var(--text-muted);font-size:12px">These CLFs have multiple submissions for the same month. Totals may be inflated due to double-counting.</span><div style="margin-top:8px;max-height:160px;overflow-y:auto">${rowsHtml}</div></div></div>`;
-      dupBanner.style.display='block';
+      dupBanner.innerHTML=`<div class="notice-icon">⚠️</div><div class="notice-content"><div class="notice-title" style="color:#991b1b">Duplicate Entries Detected — ${dupes.length} CLF${dupes.length>1?'s':''}</div><div>These CLFs have multiple submissions for the same month. Totals may be inflated due to double-counting.</div><div style="margin-top:6px;max-height:140px;overflow-y:auto">${rowsHtml}</div></div>`;
+      dupBanner.style.display='flex';
     } else {
       dupBanner.style.display='none';
     }
