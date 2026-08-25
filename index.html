@@ -1272,6 +1272,11 @@ function renderSectorTabs(){
     const bl=getVisibleBlocks();
     const isActive=currentTab===sec.id;
 
+    const april=getAprilMonth(m);
+    const monthLabel=m.split('-')[1]+'/'+m.split('-')[0].slice(2);
+    const aprilLabel=april.split('-')[1]+'/'+april.split('-')[0].slice(2);
+    const isPreApril=m<april;
+
     let html='<div class="kpi-grid">';
     if(sec.id==='cumulative'){
       // Special KPIs for cumulative: Monthly Total, Cumulative Total, Growth
@@ -1285,10 +1290,6 @@ function renderSectorTabs(){
         cumulTotal+=ov.cumulative;
       }));
       const growth=monthTotal>0?Math.round(((cumulTotal-monthTotal)/monthTotal)*100):0;
-      const april=getAprilMonth(m);
-      const monthLabel=m.split('-')[1]+'/'+m.split('-')[0].slice(2);
-      const aprilLabel=april.split('-')[1]+'/'+april.split('-')[0].slice(2);
-      const isPreApril=m<april;
 
       if(isPreApril){
         html+=`<div class="kpi-card" style="background:#3b82f608"><div class="kpi-icon" style="background:#3b82f622;color:#3b82f6">📅</div><div class="kpi-value" style="color:#3b82f6">${formatNum(Math.round(monthTotal))}</div><div class="kpi-label">Baseline Total (${monthLabel})</div><div class="kpi-trend neutral" style="font-size:10px">Up to ${monthLabel} (Sl. No. 8)</div></div>`;
@@ -1303,6 +1304,7 @@ function renderSectorTabs(){
         html+=`<div class="kpi-card" style="background:#8b5cf608"><div class="kpi-icon" style="background:#8b5cf622;color:#8b5cf6">🗓️</div><div class="kpi-value" style="color:#8b5cf6">${months.length}</div><div class="kpi-label">Months Tracked</div><div class="kpi-trend neutral" style="font-size:10px">${aprilLabel} to ${monthLabel}</div></div>`;
       }
     } else {
+
       sec.indicators.slice(0,4).forEach(ind=>{
         let displayVal, subLabel='';
         if(isTextIndicator(ind)){
