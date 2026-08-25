@@ -178,7 +178,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-primary);co
       </div>
       <div class="ctrl-field">
         <label>Year</label>
-        <select id="yearFilter" onchange="onFilterChange()"></select>
+        <select id="yearFilter" onchange="onYearChange()"></select>
       </div>
       <button class="btn" onclick="refreshDashboard()">⟳ Refresh</button>
       <button class="btn btn-success" onclick="downloadPDF(this)">📄 PDF Report</button>
@@ -386,6 +386,8 @@ const TEXT_INDICATORS = new Set([
   'Cumulative - Training Received by VO',
   'Cumulative - Training Received by SHG',
   'Cumulative - Training Received by Cadres',
+  'VRF Utilization',
+  'IFC Type of Model',
   'Cumulative - VRF Utilization',
   'Cumulative - IFC Type of Model'
 ]);
@@ -419,6 +421,7 @@ let currentTab = 'overview';
 function getClfCount(b){return BLOCKS[b]?BLOCKS[b].length:0}
 function getTotalClfs(){return Object.values(BLOCKS).reduce((s,a)=>s+a.length,0)}
 function getCurrentMonth(){return document.getElementById('monthFilter').value}
+function getLatestDataMonth(){let l='';allData.forEach(d=>{if(d.month&&d.month>l)l=d.month});return l}
 function getCurrentBlock(){return document.getElementById('blockFilter').value}
 
 function getDataForMonth(month){return allData.filter(x=>x.month===month)}
@@ -472,6 +475,25 @@ function getAprilMonth(selectedMonth){
   return y+'-04';
 }
 
+// Reads the "Cumulative - ..." (Sl. No. 8) baseline figures submitted for months before April of the FY
+function getBaselineCumulative(b,clf,selectedMonth){
+  const april=getAprilMonth(selectedMonth);
+  const base={};
+  allData.filter(x=>x.block===b&&x.clf===clf&&x.month&&x.month<april)
+    .sort((a,c)=>a.month<c.month?1:-1)
+    .forEach(r=>{
+      Object.keys(r.indicators).forEach(k=>{
+        if(k.indexOf('Cumulative - ')===0){
+          const stripped=k.substring('Cumulative - '.length);
+          const ind=COL_ALIASES[stripped]||stripped;
+          const v=Number(r.indicators[k]);
+          if(!isNaN(v)&&base[ind]===undefined) base[ind]=v;
+        }
+      });
+    });
+  return base;
+}
+
 // Returns cumulative data structure: { block → clf → indicator → { monthly, cumulative } }
 function getCumulativeData(selectedMonth){
   const april=getAprilMonth(selectedMonth);
@@ -487,8 +509,9 @@ function getCumulativeData(selectedMonth){
       const allInds=[];
       SECTIONS.filter(s=>s.id!=='cumulative').forEach(s=>s.indicators.forEach(i=>{if(!allInds.includes(i))allInds.push(i)}));
 
+      const baseline=getBaselineCumulative(b,clf,selectedMonth);
       allInds.forEach(ind=>{
-        let cumul=0;
+        let cumul=baseline[ind]||0;
         let monthly=0;
         months.forEach(m=>{
           const mData=allData.filter(x=>x.block===b&&x.clf===clf&&x.month===m);
@@ -542,7 +565,9 @@ function shortClf(n){return n.length>40?n.substring(0,40)+'...':n}
 
 // ═══ DUPLICATE DETECTION ═══
 
-function findDuplicates(){
+let rawDuplicates=[];
+function findDuplicates(){return rawDuplicates}
+function computeDuplicates(){
   const groups={};
   allData.forEach(d=>{
     const key=(d.block||'')+'||'+(d.clf||'')+'||'+(d.month||'');
@@ -557,6 +582,20 @@ function findDuplicates(){
   return dupes;
 }
 
+function dedupeData(){
+  const latest={};
+  allData.forEach(d=>{
+    const key=(d.block||'')+'||'+(d.clf||'')+'||'+(d.month||'');
+    const ts=String(d.timestamp||d.submissionDate||'');
+    const prev=latest[key];
+    if(!prev||ts>=String(prev.timestamp||prev.submissionDate||'')) latest[key]=d;
+  });
+  allData=allData.filter(d=>{
+    const key=(d.block||'')+'||'+(d.clf||'')+'||'+(d.month||'');
+    return latest[key]===d;
+  });
+}
+
 function setDataSource(src, msg){
   dataSource=src;
   const el=document.getElementById('dataStatus');
@@ -564,7 +603,7 @@ function setDataSource(src, msg){
   else if(src==='sheet'){
     const dupes=findDuplicates();
     const dupCount=dupes.length;
-    const dupTxt=dupCount>0?` &nbsp; <span style="color:var(--accent-red);font-weight:700">⚠ ${dupCount} duplicate${dupCount>1?'s':''}</span>`:'';
+    const dupTxt=dupCount>0?` &nbsp; <span style="color:var(--accent-amber);font-weight:700">⚠ ${dupCount} duplicate${dupCount>1?'s':''} auto-resolved</span>`:'';
     el.innerHTML='<span class="dot dot-green"></span> Google Sheets live'+dupTxt;
   }
   else el.innerHTML='<span class="dot dot-amber"></span> '+msg;
@@ -656,6 +695,8 @@ async function fetchFromSheet(){
       const converted=convertSummaryData(rowsToSubmissions(parseCSV(txt)));
       if(converted && converted.length){
         allData=converted;
+        rawDuplicates=computeDuplicates();
+        dedupeData();
         setDataSource('sheet','Loaded');
         document.getElementById('loadingOverlay').classList.add('hidden');
         window._chartExtras={};
@@ -696,6 +737,7 @@ function convertSummaryData(d){
         month: month,
         reportedBy: sub.reportedBy||sub.ReportedBy||'',
         submissionDate: sub.submissionDate||sub.SubmissionDate||'',
+        timestamp: sub.timestamp||sub.Timestamp||'',
         indicators: inds
       });
     });
@@ -1004,15 +1046,34 @@ function fullRefresh(){
   setTimeout(()=>renderActiveCharts(),80);
 }
 
-function onFilterChange(){fullRefresh()}
+function onFilterChange(){
+  const mf=document.getElementById('monthFilter');
+  const ye=document.getElementById('yearFilter');
+  if(mf&&mf.value&&ye){
+    const y=mf.value.split('-')[0];
+    if([...ye.options].some(o=>o.value===y)) ye.value=y;
+  }
+  fullRefresh();
+}
+function onYearChange(){
+  const y=document.getElementById('yearFilter').value;
+  const mf=document.getElementById('monthFilter');
+  if(y&&mf.value) mf.value=y+'-'+mf.value.split('-')[1];
+  fullRefresh();
+}
 function onBlockChange(){
   updateClfDropdown();
   fullRefresh();
 }
 function onClfChange(){fullRefresh()}
 
-function refreshDashboard(){
+async function refreshDashboard(){
   setDataSource(dataSource,'Refreshing...');
+  await fetchFromSheet();
+  const latest=getLatestDataMonth();
+  if(latest&&!document.getElementById('monthFilter').value){
+    document.getElementById('monthFilter').value=latest;
+  }
   fullRefresh();
 }
 
@@ -1077,7 +1138,7 @@ function renderOverview(){
       dupes.forEach(d=>{
         rowsHtml+=`<div style="padding:4px 0;border-bottom:1px solid rgba(239,68,68,.15);font-size:11px"><strong>${d.clf}</strong> <span style="color:#991b1b;opacity:.7">${d.block} | ${d.month}</span> — <strong style="color:#dc2626">${d.count} entries</strong></div>`;
       });
-      dupBanner.innerHTML=`<div class="notice-icon">⚠️</div><div class="notice-content"><div class="notice-title" style="color:#991b1b">Duplicate Entries Detected — ${dupes.length} CLF${dupes.length>1?'s':''}</div><div>These CLFs have multiple submissions for the same month. Totals may be inflated due to double-counting.</div><div style="margin-top:6px;max-height:140px;overflow-y:auto">${rowsHtml}</div></div>`;
+      dupBanner.innerHTML=`<div class="notice-icon">⚠️</div><div class="notice-content"><div class="notice-title" style="color:#991b1b">Duplicate Entries Detected — ${dupes.length} CLF${dupes.length>1?'s':''}</div><div>These CLFs had multiple submissions for the same month. The dashboard automatically keeps only the most recent submission for each month, so totals are not double-counted.</div><div style="margin-top:6px;max-height:140px;overflow-y:auto">${rowsHtml}</div></div>`;
       dupBanner.style.display='flex';
     } else {
       dupBanner.style.display='none';
@@ -1086,7 +1147,7 @@ function renderOverview(){
 
   // If a specific CLF is selected, scope "total CLFs" to that one; otherwise use block or all
   const totalClfs=sel.clf?1:(b==='all'?getTotalClfs():getClfCount(b));
-  const subClfs=new Set(data.map(d=>d.clf)).size;
+  const subClfs=new Set(data.filter(d=>Object.keys(d.indicators).length>0).map(d=>d.clf)).size;
   const compRate=totalClfs>0?Math.round((subClfs/totalClfs)*100):0;
 
   let totI=0,filI=0,empI=0;
@@ -1098,7 +1159,7 @@ function renderOverview(){
   const tSHG=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG in CLF']||0),0);
   const npa=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG Having NPA']||0),0);
 
-  const ps=new Set(pd.map(d=>d.clf)).size;
+  const ps=new Set(pd.filter(d=>Object.keys(d.indicators).length>0).map(d=>d.clf)).size;
   const pc=totalClfs>0?Math.round((ps/totalClfs)*100):0;
   const cDelta=compRate-pc;
   const pl=pd.reduce((s,d)=>s+Number(d.indicators['No. of Loan Sanctioned']||0),0);
@@ -1335,6 +1396,11 @@ function renderCumulativeIndicatorTables(sec,data,blocks){
             if(v){
               const mData=allData.filter(x=>x.block===b&&x.clf===clf&&x.month===m);
               mData.forEach(d=>{const val=d.indicators[ind]||'';if(val&&String(val).trim()!=='')mCount+=getTextCount(val)});
+              // Include the pre-April baseline list (Sl. No. 8) in the cumulative count
+              allData.filter(x=>x.block===b&&x.clf===clf&&x.month&&x.month<getAprilMonth(m)).forEach(d=>{
+                const bv=d.indicators['Cumulative - '+ind];
+                if(bv&&String(bv).trim()!=='')cCount+=getTextCount(bv);
+              });
               // For cumulative text, count across all months
               const months=getMonthsInRange(getAprilMonth(m),m);
               months.forEach(mm=>{
@@ -1585,6 +1651,13 @@ async function init(){
 
   // Try to fetch from Google Sheets
   await fetchFromSheet();
+  // Default the month filter to the latest month that actually has submissions
+  const latest=getLatestDataMonth();
+  if(latest){
+    document.getElementById('monthFilter').value=latest;
+    const ye2=document.getElementById('yearFilter');
+    if(ye2) ye2.value=latest.split('-')[0];
+  }
   fullRefresh();
 }
 
