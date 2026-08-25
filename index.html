@@ -510,6 +510,7 @@ function getCumulativeData(selectedMonth){
       SECTIONS.filter(s=>s.id!=='cumulative').forEach(s=>s.indicators.forEach(i=>{if(!allInds.includes(i))allInds.push(i)}));
 
       const baseline=getBaselineCumulative(b,clf,selectedMonth);
+      const isPreApril=selectedMonth<april;
       allInds.forEach(ind=>{
         let cumul=baseline[ind]||0;
         let monthly=0;
@@ -522,6 +523,7 @@ function getCumulativeData(selectedMonth){
             if(m===selectedMonth) monthly=val;
           }
         });
+        if(isPreApril&&monthly===0&&baseline[ind]!==undefined) monthly=baseline[ind];
         result[b][clf][ind]={monthly,cumulative:cumul};
       });
     });
@@ -1154,10 +1156,27 @@ function renderOverview(){
   data.forEach(d=>{SECTIONS.forEach(s=>s.indicators.forEach(i=>{totI++;if(d.indicators[i]!=='')filI++;else empI++}))});
   const dq=totI>0?Math.round((filI/totI)*100):0;
 
-  const tLoans=data.reduce((s,d)=>s+Number(d.indicators['No. of Loan Sanctioned']||0),0);
-  const tAmt=data.reduce((s,d)=>s+Number(d.indicators['Amount Sanctioned']||0),0);
-  const tSHG=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG in CLF']||0),0);
-  const npa=data.reduce((s,d)=>s+Number(d.indicators['No. of SHG Having NPA']||0),0);
+  // For pre-April months, fetch baseline values to display meaningful KPIs
+  const april=getAprilMonth(m);
+  const isPreApril=m<april;
+  let baseSum={};
+  if(isPreApril){
+    data.forEach(d=>{
+      Object.keys(d.indicators).forEach(k=>{
+        if(k.indexOf('Cumulative - ')===0){
+          const stripped=k.substring('Cumulative - '.length);
+          const ind=COL_ALIASES[stripped]||stripped;
+          const v=Number(d.indicators[k]);
+          if(!isNaN(v)) baseSum[ind]=(baseSum[ind]||0)+v;
+        }
+      });
+    });
+  }
+
+  const tLoans=isPreApril?(baseSum['No. of Loan Sanctioned']||0):data.reduce((s,d)=>s+Number(d.indicators['No. of Loan Sanctioned']||0),0);
+  const tAmt=isPreApril?(baseSum['Amount Sanctioned']||0):data.reduce((s,d)=>s+Number(d.indicators['Amount Sanctioned']||0),0);
+  const tSHG=isPreApril?(baseSum['No. of SHG in CLF']||0):data.reduce((s,d)=>s+Number(d.indicators['No. of SHG in CLF']||0),0);
+  const npa=isPreApril?(baseSum['No. of SHG Having NPA']||0):data.reduce((s,d)=>s+Number(d.indicators['No. of SHG Having NPA']||0),0);
 
   const ps=new Set(pd.filter(d=>Object.keys(d.indicators).length>0).map(d=>d.clf)).size;
   const pc=totalClfs>0?Math.round((ps/totalClfs)*100):0;
@@ -1166,14 +1185,14 @@ function renderOverview(){
   const lDelta=pl>0?Math.round(((tLoans-pl)/pl)*100):0;
 
   const kpis=[
-    {ic:'📋',lb:'Total CLFs',vl:totalClfs,tr:subClfs+' submitted',tc:'neutral',br:compRate,bc:'var(--accent-blue)'},
-    {ic:'✅',lb:'Completion',vl:compRate+'%',tr:(cDelta>=0?'+':'')+cDelta+'%',tc:cDelta>=0?'up':'down',br:compRate,bc:'var(--accent-green)'},
-    {ic:'💰',lb:'Loans',vl:formatNum(tLoans),tr:(lDelta>=0?'+':'')+lDelta+'%',tc:lDelta>=0?'up':'down',br:Math.min(100,tLoans/50),bc:'var(--accent-amber)'},
-    {ic:'🏦',lb:'Amount Sanctioned',vl:'₹'+formatNum(tAmt),tr:'',tc:'neutral',br:Math.min(100,tAmt/50000),bc:'var(--accent-purple)'},
-    {ic:'👥',lb:'Total SHGs',vl:formatNum(tSHG),tr:'',tc:'neutral',br:Math.min(100,tSHG/20),bc:'var(--accent-teal)'},
+    {ic:'📋',lb:isPreApril?'Total CLFs (Baseline)':'Total CLFs',vl:totalClfs,tr:subClfs+' submitted',tc:'neutral',br:compRate,bc:'var(--accent-blue)'},
+    {ic:'✅',lb:isPreApril?'Completion (Baseline)':'Completion',vl:compRate+'%',tr:(cDelta>=0?'+':'')+cDelta+'%',tc:cDelta>=0?'up':'down',br:compRate,bc:'var(--accent-green)'},
+    {ic:'💰',lb:isPreApril?'Loans (Baseline)':'Loans',vl:formatNum(tLoans),tr:(lDelta>=0?'+':'')+lDelta+'%',tc:lDelta>=0?'up':'down',br:Math.min(100,tLoans/50),bc:'var(--accent-amber)'},
+    {ic:'🏦',lb:isPreApril?'Amount Sanctioned (Baseline)':'Amount Sanctioned',vl:'₹'+formatNum(tAmt),tr:'',tc:'neutral',br:Math.min(100,tAmt/50000),bc:'var(--accent-purple)'},
+    {ic:'👥',lb:isPreApril?'Total SHGs (Baseline)':'Total SHGs',vl:formatNum(tSHG),tr:'',tc:'neutral',br:Math.min(100,tSHG/20),bc:'var(--accent-teal)'},
     {ic:'🔍',lb:'Data Quality',vl:dq+'%',tr:empI+' missing',tc:dq>85?'up':dq>60?'neutral':'down',br:dq,bc:dq>85?'var(--accent-green)':dq>60?'var(--accent-amber)':'var(--accent-red)'},
     {ic:'⚠️',lb:'NPA Count',vl:formatNum(npa),tr:npa>0?'needs attention':'clear',tc:npa>0?'down':'up',br:Math.min(100,npa*5),bc:npa>0?'var(--accent-red)':'var(--accent-green)'},
-    {ic:'📊',lb:'Indicators Filled',vl:formatNum(filI)+'/'+formatNum(totI),tr:dq+'%',tc:'neutral',br:dq,bc:'var(--accent-blue)'}
+    {ic:'📊',lb:isPreApril?'Indicators Filled (Baseline)':'Indicators Filled',vl:formatNum(filI)+'/'+formatNum(totI),tr:dq+'%',tc:'neutral',br:dq,bc:'var(--accent-blue)'}
   ];
 
   document.getElementById('kpiGrid').innerHTML=kpis.map(k=>
@@ -1269,12 +1288,20 @@ function renderSectorTabs(){
       const april=getAprilMonth(m);
       const monthLabel=m.split('-')[1]+'/'+m.split('-')[0].slice(2);
       const aprilLabel=april.split('-')[1]+'/'+april.split('-')[0].slice(2);
+      const isPreApril=m<april;
 
-      html+=`<div class="kpi-card" style="background:#3b82f608"><div class="kpi-icon" style="background:#3b82f622;color:#3b82f6">📅</div><div class="kpi-value" style="color:#3b82f6">${formatNum(Math.round(monthTotal))}</div><div class="kpi-label">Monthly Total (${monthLabel})</div><div class="kpi-trend neutral" style="font-size:10px">Current month only</div></div>`;
-      html+=`<div class="kpi-card" style="background:#10b98108"><div class="kpi-icon" style="background:#10b98122;color:#10b981">📊</div><div class="kpi-value" style="color:#10b981">${formatNum(Math.round(cumulTotal))}</div><div class="kpi-label">Cumulative (${aprilLabel} → ${monthLabel})</div><div class="kpi-trend up" style="font-size:10px">Apr through ${monthLabel}</div></div>`;
-      html+=`<div class="kpi-card" style="background:#f59e0b08"><div class="kpi-icon" style="background:#f59e0b22;color:#f59e0b">📈</div><div class="kpi-value" style="color:${growth>=0?'#10b981':'#ef4444'}">${growth>=0?'+':''}${growth}%</div><div class="kpi-label">Growth (Cumul vs Monthly)</div><div class="kpi-trend ${growth>=0?'up':'down'}" style="font-size:10px">${growth>=0?'▲':'▼'} accumulation</div></div>`;
-      const months=getMonthsInRange(april,m);
-      html+=`<div class="kpi-card" style="background:#8b5cf608"><div class="kpi-icon" style="background:#8b5cf622;color:#8b5cf6">🗓️</div><div class="kpi-value" style="color:#8b5cf6">${months.length}</div><div class="kpi-label">Months Tracked</div><div class="kpi-trend neutral" style="font-size:10px">${aprilLabel} to ${monthLabel}</div></div>`;
+      if(isPreApril){
+        html+=`<div class="kpi-card" style="background:#3b82f608"><div class="kpi-icon" style="background:#3b82f622;color:#3b82f6">📅</div><div class="kpi-value" style="color:#3b82f6">${formatNum(Math.round(monthTotal))}</div><div class="kpi-label">Baseline Total (${monthLabel})</div><div class="kpi-trend neutral" style="font-size:10px">Up to ${monthLabel} (Sl. No. 8)</div></div>`;
+        html+=`<div class="kpi-card" style="background:#10b98108"><div class="kpi-icon" style="background:#10b98122;color:#10b981">📊</div><div class="kpi-value" style="color:#10b981">${formatNum(Math.round(cumulTotal))}</div><div class="kpi-label">Cumulative (Pre-April Baseline)</div><div class="kpi-trend up" style="font-size:10px">CLF inspection data up to ${monthLabel}</div></div>`;
+        html+=`<div class="kpi-card" style="background:#f59e0b08"><div class="kpi-icon" style="background:#f59e0b22;color:#f59e0b">📈</div><div class="kpi-value" style="color:#f59e0b">—</div><div class="kpi-label">Growth</div><div class="kpi-trend neutral" style="font-size:10px">N/A before April</div></div>`;
+        html+=`<div class="kpi-card" style="background:#8b5cf608"><div class="kpi-icon" style="background:#8b5cf622;color:#8b5cf6">🗓️</div><div class="kpi-value" style="color:#8b5cf6">0</div><div class="kpi-label">Months Tracked (FY 2026)</div><div class="kpi-trend neutral" style="font-size:10px">Tracking starts Apr 2026</div></div>`;
+      } else {
+        html+=`<div class="kpi-card" style="background:#3b82f608"><div class="kpi-icon" style="background:#3b82f622;color:#3b82f6">📅</div><div class="kpi-value" style="color:#3b82f6">${formatNum(Math.round(monthTotal))}</div><div class="kpi-label">Monthly Total (${monthLabel})</div><div class="kpi-trend neutral" style="font-size:10px">Current month only</div></div>`;
+        html+=`<div class="kpi-card" style="background:#10b98108"><div class="kpi-icon" style="background:#10b98122;color:#10b981">📊</div><div class="kpi-value" style="color:#10b981">${formatNum(Math.round(cumulTotal))}</div><div class="kpi-label">Cumulative (${aprilLabel} → ${monthLabel})</div><div class="kpi-trend up" style="font-size:10px">Apr through ${monthLabel}</div></div>`;
+        html+=`<div class="kpi-card" style="background:#f59e0b08"><div class="kpi-icon" style="background:#f59e0b22;color:#f59e0b">📈</div><div class="kpi-value" style="color:${growth>=0?'#10b981':'#ef4444'}">${growth>=0?'+':''}${growth}%</div><div class="kpi-label">Growth (Cumul vs Monthly)</div><div class="kpi-trend ${growth>=0?'up':'down'}" style="font-size:10px">${growth>=0?'▲':'▼'} accumulation</div></div>`;
+        const months=getMonthsInRange(april,m);
+        html+=`<div class="kpi-card" style="background:#8b5cf608"><div class="kpi-icon" style="background:#8b5cf622;color:#8b5cf6">🗓️</div><div class="kpi-value" style="color:#8b5cf6">${months.length}</div><div class="kpi-label">Months Tracked</div><div class="kpi-trend neutral" style="font-size:10px">${aprilLabel} to ${monthLabel}</div></div>`;
+      }
     } else {
       sec.indicators.slice(0,4).forEach(ind=>{
         let displayVal, subLabel='';
@@ -1292,7 +1319,7 @@ function renderSectorTabs(){
     }
     html+='</div><div class="panel-row cols-2">';
     if(sec.id==='cumulative'){
-      html+=`<div class="card"><div class="card-header"><h3>📊 Monthly vs Cumulative — All Indicators</h3><span class="card-badge badge-blue" style="font-size:9px">Apr → ${m}</span></div><div class="card-body no-pad" id="table${sec.id}Indicators"></div></div>`;
+      html+=`<div class="card"><div class="card-header"><h3>📊 Monthly vs Cumulative — All Indicators</h3><span class="card-badge badge-blue" style="font-size:9px">${isPreApril?'Baseline up to '+m:'Apr → '+m}</span></div><div class="card-body no-pad" id="table${sec.id}Indicators"></div></div>`;
       html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise Cumulative</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
     } else {
       html+=`<div class="card"><div class="card-header"><h3>${sec.icon} Block-wise ${sec.name}</h3></div><div class="card-body"><div class="chart-container tall"><canvas id="chart${sec.id}BlockInd"></canvas></div></div></div>`;
